@@ -19,7 +19,7 @@ sys.path.insert(0, str(src_path))
 from train import train
 from evaluate import linear_evaluation, evaluate_multiple_runs
 from config import get_config, print_config
-from data import load_dataset
+from dataset import load_dataset
 
 
 def main():

@@ -11,7 +11,7 @@ from pathlib import Path
 import os
 
 from .config import get_config
-from .data import load_dataset, get_normalized_adjacency_dense
+from .dataset import load_dataset, get_normalized_adjacency_dense
 from .augment import drop_edges, mask_features
 from .encoder import GCNEncoder, ProjectionHead, ContrastiveModel
 from .conflict import compute_conflict_index
@@ -245,15 +245,14 @@ def finetune_phase(
                 edge_idx_v = drop_edges(edge_index, N, cfg.p_e).to(device)
                 X_v = mask_features(X, cfg.p_f).to(device)
 
-                # Get representations
-                with torch.no_grad():
-                    H_u = encoder(X_u, edge_idx_u)
-                    H_v = encoder(X_v, edge_idx_v)
+                # Get representations (with gradients enabled for encoder update)
+                H_u = encoder(X_u, edge_idx_u)
+                H_v = encoder(X_v, edge_idx_v)
 
-                # Build fusion vectors
+                # Build fusion vectors (detach to prevent gradients through discriminator evaluation)
                 C_struct_dev = C_struct.to(device)
-                Z_u = build_fusion_vectors(H_u, C_struct_dev)
-                Z_v = build_fusion_vectors(H_v, C_struct_dev)
+                Z_u = build_fusion_vectors(H_u.detach(), C_struct_dev)
+                Z_v = build_fusion_vectors(H_v.detach(), C_struct_dev)
 
                 # Get discriminator scores
                 batch_nodes_expanded = batch_nodes.unsqueeze(1).expand(-1, B)
