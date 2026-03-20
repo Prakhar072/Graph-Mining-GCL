@@ -27,7 +27,7 @@ def compute_ppr_matrix(A_norm, num_nodes, alpha=0.15, num_iterations=10, device=
         device: Device for computation
 
     Returns:
-        torch.Tensor: PPR matrix, shape (N, N), row-normalized
+        torch.Tensor: PPR matrix, shape (N, N), NOT row-normalized to preserve true values
     """
     if device is None:
         device = A_norm.device
@@ -46,11 +46,7 @@ def compute_ppr_matrix(A_norm, num_nodes, alpha=0.15, num_iterations=10, device=
     for _ in range(num_iterations):
         H = (1 - alpha) * (A_norm_dense @ H) + alpha * torch.eye(num_nodes, dtype=H.dtype, device=device)
 
-    # Row-normalize H to sum to 1
-    row_sums = H.sum(dim=1, keepdim=True)
-    row_sums = torch.clamp(row_sums, min=1e-8)
-    H = H / row_sums
-
+    # Do NOT row-normalize - we want to preserve raw PPR values for conflict detection
     return H
 
 
@@ -59,12 +55,13 @@ def compute_cosine_similarity_matrix(X):
     Compute cosine similarity matrix for row-normalized features.
 
     Since X is already row-normalized, cosine similarity reduces to dot product.
+    We keep values in [-1, 1] without row-normalization to preserve true similarity.
 
     Args:
         X (torch.Tensor): Row-normalized feature matrix, shape (N, D)
 
     Returns:
-        torch.Tensor: Cosine similarity matrix, shape (N, N)
+        torch.Tensor: Cosine similarity matrix, shape (N, N), values in [-1, 1]
     """
     # X is already row-normalized, so cosine sim = X @ X.T
     cos_sim = torch.mm(X, X.t())
@@ -72,11 +69,7 @@ def compute_cosine_similarity_matrix(X):
     # Ensure values are in [-1, 1] (handle numerical errors)
     cos_sim = torch.clamp(cos_sim, -1.0, 1.0)
 
-    # Row-normalize to sum to 1
-    row_sums = cos_sim.sum(dim=1, keepdim=True)
-    row_sums = torch.clamp(row_sums, min=1e-8)
-    cos_sim = cos_sim / row_sums
-
+    # Do NOT row-normalize - we want to preserve raw cosine values for conflict detection
     return cos_sim
 
 
@@ -136,7 +129,10 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
         for i, j in pos_pairs:
             ppr_sim = ppr_matrix[i, j].item()
             cos_sim = cos_sim_matrix[i, j].item()
-            conflict = abs(ppr_sim - cos_sim)
+            # Normalize to [0, 1]: PPR is typically 0-1, cosine is -1 to 1, so map to [0, 1]
+            ppr_norm = max(0, min(1, ppr_sim))  # Clamp PPR to [0, 1]
+            cos_norm = (cos_sim + 1) / 2  # Map cosine from [-1, 1] to [0, 1]
+            conflict = abs(ppr_norm - cos_norm)
             conflict_values.append(conflict)
 
     # Sample random non-edges (negative pairs)
@@ -148,7 +144,10 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
         if i != j and A_dense[i, j].item() == 0:  # Non-edge
             ppr_sim = ppr_matrix[i, j].item()
             cos_sim = cos_sim_matrix[i, j].item()
-            conflict = abs(ppr_sim - cos_sim)
+            # Normalize to [0, 1]
+            ppr_norm = max(0, min(1, ppr_sim))
+            cos_norm = (cos_sim + 1) / 2
+            conflict = abs(ppr_norm - cos_norm)
             conflict_values.append(conflict)
             neg_samples_collected += 1
 

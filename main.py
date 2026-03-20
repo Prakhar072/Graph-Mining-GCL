@@ -12,14 +12,14 @@ import argparse
 import torch
 
 #Add src to path
-from pathlib import Path
-src_path = Path(__file__).parent / "src"
-sys.path.insert(0, str(src_path))
+# from pathlib import Path
+# src_path = Path(__file__).parent / "src"
+# sys.path.insert(0, str(src_path))
 
-from train import train
-from evaluate import linear_evaluation, evaluate_multiple_runs
-from config import get_config, print_config
-from dataset import load_dataset
+from src.train import train, load_pretrained_encoder
+from src.evaluate import linear_evaluation, evaluate_multiple_runs
+from src.config import get_config, print_config
+from src.dataset import load_dataset
 
 
 def main():
@@ -100,12 +100,26 @@ def main():
         print("\nWARNING: CUDA requested but not available. Using CPU.")
         args.device = "cpu"
 
-    # Train
+    # Train or load checkpoint
     print("\n" + "="*70)
-    print("STARTING TRAINING")
-    print("="*70)
-
-    encoder, cfg = train(args.dataset, device=args.device, **kwargs)
+    if args.evaluate:
+        print("LOADING PRETRAINED MODEL FROM CHECKPOINT")
+        print("="*70)
+        try:
+            encoder, cfg = load_pretrained_encoder(
+                args.dataset, 
+                device=args.device,
+                **kwargs
+            )
+            print("✓ Checkpoint loaded successfully!")
+        except FileNotFoundError as e:
+            print(f"✗ {e}")
+            print("\nFalling back to training...")
+            encoder, cfg = train(args.dataset, device=args.device, **kwargs)
+    else:
+        print("STARTING TRAINING")
+        print("="*70)
+        encoder, cfg = train(args.dataset, device=args.device, **kwargs)
 
     # Evaluate (optional)
     if args.evaluate:

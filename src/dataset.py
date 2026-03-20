@@ -180,7 +180,9 @@ def get_normalized_adjacency_dense(edge_index, num_nodes, dtype=torch.float):
     # Create normalized adjacency
     edge_weight = deg_inv_sqrt[edge_index_with_loops[0]] * deg_inv_sqrt[edge_index_with_loops[1]]
 
-    adj_norm = torch.zeros(num_nodes, num_nodes, dtype=dtype)
+    # Create adj_norm on the same device as edge_index
+    device = edge_index_with_loops.device
+    adj_norm = torch.zeros(num_nodes, num_nodes, dtype=dtype, device=device)
     adj_norm[edge_index_with_loops[0], edge_index_with_loops[1]] = edge_weight
 
     return adj_norm

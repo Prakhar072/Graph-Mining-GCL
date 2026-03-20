@@ -106,8 +106,7 @@ def get_pair_scores(discriminator, Z, pair_indices):
 
     Z_combined = Z_i * Z_j
 
-    with torch.no_grad():
-        scores = discriminator(Z_combined)
+    scores = discriminator(Z_combined)
 
     return scores
 
@@ -123,7 +122,7 @@ def build_pretrain_pairs(A, X, k=10):
         A_dense = A
 
     A_no_diag = A_dense.clone()
-    torch.fill_diagonal(A_no_diag, 0.0)
+    A_no_diag.diagonal().zero_()
 
     X_np = X.cpu().numpy()
     nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='auto').fit(X_np)

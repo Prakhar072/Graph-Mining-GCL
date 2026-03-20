@@ -66,43 +66,73 @@ DATASET_CONFIGS = {
         'tau': 0.8,
         'm': 128,
         'pretrain_enc_epochs': 300,
+        'n_iterations': 20,
+        'finetune_enc_epochs': 15,
+        'finetune_disc_epochs': 10,
         'alpha': 5.0,
         'beta': 0.5,
+        'lr_enc': 1e-3,
+        'lr_disc': 8e-3,
     },
     'citeseer': {
         'tau': 0.8,
         'm': 128,
         'pretrain_enc_epochs': 300,
+        'n_iterations': 20,
+        'finetune_enc_epochs': 15,
+        'finetune_disc_epochs': 10,
         'alpha': 5.0,
         'beta': 0.5,
+        'lr_enc': 1e-3,
+        'lr_disc': 8e-3,
     },
     'pubmed': {
         'tau': 0.8,
         'm': 128,
         'pretrain_enc_epochs': 300,
+        'n_iterations': 20,
+        'finetune_enc_epochs': 15,
+        'finetune_disc_epochs': 10,
         'alpha': 5.0,
         'beta': 0.5,
+        'lr_enc': 1e-3,
+        'lr_disc': 8e-3,
     },
     'chameleon': {
         'tau': 1.2,  # Higher temp for heterophilic
         'm': 128,
-        'pretrain_enc_epochs': 400,
+        'pretrain_enc_epochs': 500,  # Increased for heterophilic
+        'n_iterations': 35,  # Increased iterations
+        'finetune_enc_epochs': 20,  # Longer fine-tuning per iteration
+        'finetune_disc_epochs': 15,  # Longer discriminator tuning
         'alpha': 5.0,
         'beta': 0.5,
+        'lr_enc': 1.2e-3,  # Slightly higher LR
+        'lr_disc': 1e-2,  # Slightly higher LR
     },
     'squirrel': {
         'tau': 1.2,  # Higher temp for heterophilic
         'm': 128,
-        'pretrain_enc_epochs': 400,
+        'pretrain_enc_epochs': 500,  # Increased for heterophilic
+        'n_iterations': 35,  # Increased iterations
+        'finetune_enc_epochs': 20,  # Longer fine-tuning per iteration
+        'finetune_disc_epochs': 15,  # Longer discriminator tuning
         'alpha': 5.0,
         'beta': 0.5,
+        'lr_enc': 1.2e-3,  # Slightly higher LR
+        'lr_disc': 1e-2,  # Slightly higher LR
     },
     'actor': {
         'tau': 1.2,  # Higher temp for heterophilic
         'm': 128,
-        'pretrain_enc_epochs': 400,
+        'pretrain_enc_epochs': 500,  # Increased for heterophilic
+        'n_iterations': 40,  # Most iterations (highly heterophilic)
+        'finetune_enc_epochs': 20,  # Longer fine-tuning per iteration
+        'finetune_disc_epochs': 15,  # Longer discriminator tuning
         'alpha': 5.0,
         'beta': 0.5,
+        'lr_enc': 1.2e-3,  # Slightly higher LR
+        'lr_disc': 1e-2,  # Slightly higher LR
     },
 }
 

@@ -37,12 +37,11 @@ def soft_contrastive_loss(H, W, tau, m):
     B, d = H.shape
     assert W.shape == (B, B), f"W must have shape ({B}, {B}), got {W.shape}"
 
-    # Verify that W is row-stochastic (each row sums to ~1)
-    row_sums = W.sum(dim=1)
-    assert torch.allclose(
-        row_sums, torch.ones(B, device=W.device, dtype=W.dtype),
-        atol=1e-5
-    ), f"W rows must sum to 1, got min={row_sums.min():.4f}, max={row_sums.max():.4f}"
+    # Ensure W is row-stochastic (each row sums to 1)
+    # This handles batched slices of W_total which may not sum to 1
+    row_sums = W.sum(dim=1, keepdim=True)
+    row_sums = torch.clamp(row_sums, min=1e-8)  # Avoid division by zero
+    W = W / row_sums
 
     # Compute SPART similarity
     S = spart_similarity(H, H, m, tau)  # shape: (B, B)

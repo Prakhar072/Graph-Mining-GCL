@@ -42,8 +42,9 @@ def set_seed(seed):
 
 
 def create_checkpoints_dir(cfg):
-    """Create checkpoint directory."""
-    checkpoint_dir = Path(cfg.checkpoint_dir)
+    """Create checkpoint directory, organized by dataset."""
+    checkpoint_root = Path(cfg.checkpoint_dir)
+    checkpoint_dir = checkpoint_root / cfg.dataset
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     return checkpoint_dir
 
@@ -53,6 +54,129 @@ def save_checkpoint(encoder, epoch, checkpoint_dir, name='encoder'):
     checkpoint_path = Path(checkpoint_dir) / f'{name}_epoch_{epoch}.pt'
     torch.save(encoder.state_dict(), checkpoint_path)
     print(f"Saved checkpoint: {checkpoint_path}")
+
+
+def load_checkpoint(model, checkpoint_path, device='cpu'):
+    """Load model from checkpoint with validation."""
+    state_dict = torch.load(checkpoint_path, map_location=device)
+    
+    # Validate checkpoint compatibility by checking conv1.lin.weight shape
+    try:
+        # Get expected weight shape from model
+        expected_weight_shape = model.conv1.lin.weight.shape
+        
+        # Get weight shape from checkpoint
+        checkpoint_weight_shape = state_dict['conv1.lin.weight'].shape
+        
+        if expected_weight_shape != checkpoint_weight_shape:
+            raise RuntimeError(
+                f"Checkpoint incompatible: expected conv1.lin.weight shape {expected_weight_shape}, "
+                f"but checkpoint has {checkpoint_weight_shape}"
+            )
+    except Exception as e:
+        raise RuntimeError(f"Checkpoint validation failed: {e}")
+    
+    model.load_state_dict(state_dict)
+    print(f"Loaded checkpoint: {checkpoint_path}")
+    return model
+
+
+def find_latest_checkpoint(checkpoint_dir, dataset_name):
+    """Find the latest checkpoint (preferring fine-tuned over pre-trained) for a dataset."""
+    checkpoint_path = Path(checkpoint_dir)
+    if not checkpoint_path.exists():
+        return None
+    
+    # Create dataset-specific subdirectory name
+    dataset_checkpoint_dir = checkpoint_path / dataset_name
+    
+    # If dataset-specific checkpoints exist, use those
+    if dataset_checkpoint_dir.exists():
+        checkpoint_path = dataset_checkpoint_dir
+    
+    # First priority: Look for fine-tuning checkpoints (encoder_finetune_iter_*.pt)
+    finetune_checkpoints = list(checkpoint_path.glob('encoder_finetune_iter_*.pt'))
+    if finetune_checkpoints:
+        # Return the most recent one
+        latest = sorted(finetune_checkpoints, key=lambda p: p.stat().st_mtime)[-1]
+        print(f"Using fine-tuned checkpoint: {latest.name}")
+        return latest
+    
+    # Second priority: Look for the final pretrain checkpoint
+    final_checkpoints = list(checkpoint_path.glob('encoder_pretrain_final*.pt'))
+    if final_checkpoints:
+        # Return the most recent one
+        latest = sorted(final_checkpoints, key=lambda p: p.stat().st_mtime)[-1]
+        print(f"Using pre-trained checkpoint: {latest.name}")
+        return latest
+    
+    # Fall back to any encoder checkpoint
+    all_checkpoints = list(checkpoint_path.glob('encoder*.pt'))
+    if all_checkpoints:
+        return sorted(all_checkpoints, key=lambda p: p.stat().st_mtime)[-1]
+    
+    return None
+
+
+def load_pretrained_encoder(dataset_name, device='cpu', checkpoint_dir='./checkpoints', **kwargs):
+    """Load pre-trained encoder from checkpoint."""
+    from .encoder import GCNEncoder
+    from .config import get_config
+    from .dataset import load_dataset
+    
+    # Get config
+    cfg = get_config(dataset_name, **kwargs)
+    
+    # Load dataset to get dimensions
+    A_norm, X, y, edge_index, N, D = load_dataset(dataset_name)
+    cfg.in_dim = D
+    
+    # Create encoder
+    encoder = GCNEncoder(cfg.in_dim, cfg.hidden_dim, cfg.out_dim, cfg.dropout).to(device)
+    
+    # Find checkpoints in priority order
+    checkpoint_path = Path(checkpoint_dir)
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"Checkpoint directory not found: {checkpoint_dir}")
+    
+    # Look for dataset-specific subdirectory first
+    dataset_checkpoint_dir = checkpoint_path / dataset_name
+    search_path = dataset_checkpoint_dir if dataset_checkpoint_dir.exists() else checkpoint_path
+    
+    # Try fine-tuning checkpoints first (most recent to oldest)
+    finetune_checkpoints = sorted(
+        search_path.glob('encoder_finetune_iter_*.pt'),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )
+    
+    # Try pretrain final checkpoints next
+    pretrain_final_checkpoints = sorted(
+        search_path.glob('encoder_pretrain_final*.pt'),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )
+    
+    all_candidates = finetune_checkpoints + pretrain_final_checkpoints
+    
+    for checkpoint_candidate in all_candidates:
+        try:
+            print(f"Trying checkpoint: {checkpoint_candidate.name}...", end=" ")
+            encoder = load_checkpoint(encoder, str(checkpoint_candidate), device=device)
+            print("✓")
+            encoder.eval()
+            return encoder, cfg
+        except RuntimeError as e:
+            print(f"✗ (Skipped: {str(e)[:60]}...)")
+            # Recreate fresh encoder for next attempt
+            encoder = GCNEncoder(cfg.in_dim, cfg.hidden_dim, cfg.out_dim, cfg.dropout).to(device)
+            continue
+    
+    # No compatible checkpoint found
+    raise FileNotFoundError(
+        f"No compatible checkpoint found in {search_path}. "
+        f"Please train the model first without --evaluate"
+    )
 
 
 def train_epoch(model, optimizer, loader, W_batch, tau, m, device):
@@ -234,6 +358,8 @@ def finetune_phase(
             encoder.train()
 
             batch_indices = torch.randperm(N).split(batch_size)
+            epoch_loss = 0
+            num_batches = 0
 
             for batch_nodes in batch_indices:
                 batch_nodes = batch_nodes.to(device)
@@ -264,10 +390,12 @@ def finetune_phase(
                 with torch.no_grad():
                     scores = get_pair_scores(discriminator, Z_u, pair_indices)
 
-                # Build calibrated weights
-                l_tilde = (scores >= cfg.eta).float()
+                # Build calibrated weights using SOFT thresholding (not hard)
+                # Use sigmoid to convert scores to soft weights in [0, 1]
+                # This prevents complete zeroing out of weight matrix
+                soft_weights = torch.sigmoid((scores - cfg.eta) * 10)  # Sharper sigmoid centered at eta
                 W_batch_sliced = W_total[batch_nodes][:, batch_nodes].to(device)
-                W_cali = W_batch_sliced * l_tilde.reshape(B, B)
+                W_cali = W_batch_sliced * soft_weights.reshape(B, B)
 
                 # Get batch representations for current view
                 H_u_batch = H_u[batch_nodes]
@@ -280,8 +408,12 @@ def finetune_phase(
                 loss.backward()
                 optimizer_enc.step()
 
+                epoch_loss += loss.item()
+                num_batches += 1
+
+            avg_loss = epoch_loss / max(num_batches, 1)
             if (enc_epoch + 1) % 5 == 0:
-                print(f"    Encoder epoch {enc_epoch + 1}/{cfg.finetune_enc_epochs}: Loss = {loss.item():.6f}")
+                print(f"    Encoder epoch {enc_epoch + 1}/{cfg.finetune_enc_epochs}: Loss = {avg_loss:.6f}")
 
         # STEP B: Update discriminator
         print("  Updating discriminator...")
