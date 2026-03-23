@@ -75,7 +75,7 @@ Run the complete pipeline on the Cora dataset:
 python main.py --dataset cora --device cpu
 
 # GPU (if available)
-python main.py --dataset cora --device cuda --evaluate
+python main.py --dataset cora --device cuda
 ```
 
 ### Command-Line Options
@@ -97,14 +97,11 @@ Options:
 ### Examples
 
 ```bash
-# Train on heterophilic dataset with evaluation
-python main.py --dataset chameleon --device cuda --evaluate --n-eval-runs 10
-
 # Custom hyperparameters
 python main.py --dataset cora --pretrain-epochs 200 --tau 1.0
 
 # Reproducible training with fixed seed
-python main.py --dataset citeseer --seed 123 --evaluate
+python main.py --dataset citeseer --seed 123
 ```
 
 ## Core Components
@@ -378,78 +375,3 @@ python src/config.py
 # Test evaluation
 python src/evaluate.py
 ```
-
-## Known Issues & Fixes
-
-### Issue: Training Loss Not Decreasing
-
-**Cause**: Encoder not receiving gradients during fine-tuning
-**Fixed**: Line 249 in `train.py` - Removed incorrect `torch.no_grad()` context during encoder forward pass
-
-**Previous Code** (INCORRECT):
-```python
-with torch.no_grad():
-    H_u = encoder(X_u, edge_idx_u)  # No gradients!
-```
-
-**Current Code** (CORRECT):
-```python
-H_u = encoder(X_u, edge_idx_u)  # Has gradients
-Z_u = build_fusion_vectors(H_u.detach(), C_struct)  # Detach only for discriminator
-```
-
-### Issue: CUDA Out of Memory
-
-**Solution**: Reduce batch size in config or use CPU for smaller graphs.
-
-### Issue: Slow Data Loading
-
-**Solution**: Data is cached after first load in `cache/` directory.
-
-## Citation
-
-If you use this framework in your research, please cite:
-
-```
-@article{gcl2024,
-  title={Conflict-Conditioned Soft Contrastive Learning for Graphs},
-  year={2024}
-}
-```
-
-## License
-
-[MIT License](LICENSE) - See LICENSE file for details
-
-## Contributing
-
-Contributions welcome! Please ensure:
-- Code follows existing style
-- All modules have test coverage
-- Documentation is updated
-- Tests pass before submitting PR
-
-## Troubleshooting
-
-### Q: Module not found error?
-**A**: Ensure `src/` is in Python path or run from project root:
-```bash
-cd Graph-Mining-GCL
-python main.py --dataset cora
-```
-
-### Q: What if my dataset is not in the list?
-**A**: Add to `DATASET_CONFIGS` in `config.py` and implement loader in `dataset.py`
-
-### Q: How to use with custom graph data?
-**A**: Convert to PyTorch Geometric format and add loader to `dataset.py`
-
-### Q: Training too slow?
-**A**: Use GPU, reduce pre-training epochs, or reduce partition size `m`
-
-## References
-
-- PyTorch Geometric: https://pytorch-geometric.readthedocs.io/
-- Graph Contrastive Learning: https://arxiv.org/abs/2006.05582
-- Homophily and Heterophily in Graphs: https://arxiv.org/abs/2009.13066
-
