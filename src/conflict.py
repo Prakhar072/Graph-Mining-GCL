@@ -73,42 +73,31 @@ def compute_cosine_similarity_matrix(X):
     # Do NOT row-normalize - we want to preserve raw cosine values for conflict detection
     return cos_sim
 
-
 def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
     """
     Compute conflict index measuring divergence between structural and attribute similarity.
-
-    Samples n_samples pairs: half from existing edges, half random non-edges.
-    Computes structural similarity using PPR and attribute similarity using cosine.
-    Conflict index C = mean |PPR(i,j) - cos_sim(i,j)| over sampled pairs.
-
     Args:
         A (torch.Tensor): Adjacency matrix (sparse or dense), shape (N, N)
         X (torch.Tensor): Row-normalized feature matrix, shape (N, D)
-        n_samples (int): Number of pairs to sample, default 10000
+        n_samples (int): Number of sampled node pairs
         alpha (float): PPR teleport probability
         device: Computation device
 
     Returns:
-        float: Conflict index C in [0, 1]
+        float: Conflict index C in [0, 2] (before optional normalization)
     """
     num_nodes = X.shape[0]
 
     if device is None:
         device = X.device
 
-    print(f"Computing conflict index with {n_samples} samples...")
+    print(f"Computing conflict index with {n_samples} uniform samples...")
 
-    # Convert adjacency to dense if sparse
+    # Convert adjacency to dense if needed
     if A.is_sparse:
         A_dense = A.coalesce().to_dense()
     else:
         A_dense = A
-
-    # Ensure A_dense has self-loops (should already have them from preprocessing)
-    # Get list of existing edges
-    edge_indices = torch.nonzero(A_dense, as_tuple=False)  # (num_edges, 2)
-    num_edges = edge_indices.shape[0]
 
     # Compute PPR matrix
     ppr_matrix = compute_ppr_matrix(A_dense, num_nodes, alpha)
@@ -116,48 +105,34 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
     # Compute cosine similarity matrix
     cos_sim_matrix = compute_cosine_similarity_matrix(X)
 
-    # Sample pairs
-    n_pos_samples = n_samples // 2
-    n_neg_samples = n_samples // 2
+    # Sample uniformly from all node pairs
+    i_samples = torch.randint(0, num_nodes, (n_samples,))
+    j_samples = torch.randint(0, num_nodes, (n_samples,))
 
     conflict_values = []
 
-    # Sample from existing edges (positive pairs)
-    if num_edges > 0:
-        pos_indices = torch.randperm(num_edges, device='cpu')[:min(n_pos_samples, num_edges)]
-        pos_pairs = edge_indices[pos_indices]
+    for i, j in zip(i_samples, j_samples):
+        if i == j:
+            continue  # skip trivial self-pairs
 
-        for i, j in pos_pairs:
-            ppr_sim = ppr_matrix[i, j].item()
-            cos_sim = cos_sim_matrix[i, j].item()
-            # Map PPR from [0, 1] to [-1, 1] to preserve negative information from cosine
-            ppr_norm = ppr_sim * 2 - 1  # Map [0, 1] to [-1, 1]
-            cos_norm = cos_sim  # Keep cosine as is, already in [-1, 1]
-            conflict = abs(ppr_norm - cos_norm)
-            conflict_values.append(conflict)
+        ppr_sim = ppr_matrix[i, j].item()
+        cos_sim = cos_sim_matrix[i, j].item()
 
-    # Sample random non-edges (negative pairs)
-    neg_samples_collected = 0
-    while neg_samples_collected < n_neg_samples:
-        i = torch.randint(0, num_nodes, (1,)).item()
-        j = torch.randint(0, num_nodes, (1,)).item()
+        # Normalize PPR to [-1, 1] for fair comparison
+        ppr_norm = ppr_sim * 2 - 1
+        cos_norm = cos_sim
 
-        if i != j and A_dense[i, j].item() == 0:  # Non-edge
-            ppr_sim = ppr_matrix[i, j].item()
-            cos_sim = cos_sim_matrix[i, j].item()
-            # Map PPR from [0, 1] to [-1, 1] to preserve negative information from cosine
-            ppr_norm = ppr_sim * 2 - 1  # Map [0, 1] to [-1, 1]
-            cos_norm = cos_sim  # Keep cosine as is, already in [-1, 1]
-            conflict = abs(ppr_norm - cos_norm)
-            conflict_values.append(conflict)
-            neg_samples_collected += 1
+        conflict = abs(ppr_norm - cos_norm)
+        conflict_values.append(conflict)
 
     # Compute mean conflict
     C = np.mean(conflict_values) if conflict_values else 0.0
+    C = C / 2
 
     print(f"  Conflict index C = {C:.6f}")
 
     return C
+
 
 
 if __name__ == "__main__":
