@@ -24,8 +24,8 @@ from .discriminator import (
     get_pair_scores,
     build_pretrain_pairs,
     build_finetune_pairs,
-    balanced_softmax_loss,
 )
+from .loss import balanced_softmax_loss
 
 
 def set_seed(seed):

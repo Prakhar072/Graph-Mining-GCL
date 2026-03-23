@@ -8,6 +8,7 @@ graph's conflict index (homophily-heterophily regime).
 
 import torch
 import torch.nn.functional as F
+import numpy as np
 
 # Try relative import if available, otherwise absolute
 #request change: should be able to use proper import now that we are in the same package
@@ -17,6 +18,34 @@ except ImportError:
     from spart import spart_similarity
 
 # request rewrites: we are implementing something completely different from the outlined methodology
+
+
+def balanced_softmax_loss(scores, labels, n_pos, n_neg):
+    """
+    Compute balanced softmax loss for pair classification.
+
+    Args:
+        scores (torch.Tensor): Discriminator scores for pairs
+        labels (torch.Tensor): Binary labels (1 for positive, 0 for negative)
+        n_pos (int): Number of positive pairs
+        n_neg (int): Number of negative pairs
+
+    Returns:
+        torch.Tensor: Scalar loss value
+    """
+    device = scores.device
+
+    adjustment = torch.where(
+        labels == 1,
+        torch.tensor(np.log(n_pos + 1e-8), dtype=scores.dtype, device=device),
+        torch.tensor(np.log(n_neg + 1e-8), dtype=scores.dtype, device=device)
+    )
+
+    adjusted_scores = scores + adjustment
+    loss = F.binary_cross_entropy_with_logits(adjusted_scores, labels.float())
+
+    return loss
+
 
 def soft_contrastive_loss(H, W, tau, m):
     """

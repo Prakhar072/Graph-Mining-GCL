@@ -161,18 +161,3 @@ def build_finetune_pairs(A, H, k=10):
     """Build pairs for fine-tuning discriminator."""
     return build_pretrain_pairs(A, H, k=k)
 
-
-def balanced_softmax_loss(scores, labels, n_pos, n_neg):
-    """Compute balanced softmax loss for pair classification."""
-    device = scores.device
-
-    adjustment = torch.where(
-        labels == 1,
-        torch.tensor(np.log(n_pos + 1e-8), dtype=scores.dtype, device=device),
-        torch.tensor(np.log(n_neg + 1e-8), dtype=scores.dtype, device=device)
-    )
-
-    adjusted_scores = scores + adjustment
-    loss = F.binary_cross_entropy_with_logits(adjusted_scores, labels.float())
-
-    return loss
