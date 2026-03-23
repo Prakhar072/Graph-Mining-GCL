@@ -178,42 +178,6 @@ def load_pretrained_encoder(dataset_name, device='cpu', checkpoint_dir='./checkp
         f"Please train the model first without --evaluate"
     )
 
-
-def train_epoch(model, optimizer, loader, W_batch, tau, m, device):
-    """Train one epoch of encoder with soft contrastive loss."""
-    model.train()
-    total_loss = 0
-    num_batches = 0
-
-    for batch_idx, batch_nodes in enumerate(loader):
-        batch_nodes = batch_nodes.to(device)
-        B = len(batch_nodes)
-
-        # Get soft weights for batch
-        W_batch_sliced = W_batch[batch_nodes][:, batch_nodes]
-
-        # Forward pass - create two augmented views
-        z_u = model(batch_nodes)
-        z_v = model(batch_nodes)
-
-        # Compute loss
-        loss = soft_contrastive_loss(z_u, W_batch_sliced, tau, m)
-
-        # Backward pass
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        total_loss += loss.item()
-        num_batches += 1
-
-        if (batch_idx + 1) % 10 == 0:
-            print(f"  Batch {batch_idx + 1}: Loss = {loss.item():.6f}")
-
-    avg_loss = total_loss / num_batches if num_batches > 0 else 0
-    return avg_loss
-
-
 def pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir):
     """Pre-train encoder with soft contrastive loss."""
     print("\n" + "="*60)
