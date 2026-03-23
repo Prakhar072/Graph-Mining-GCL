@@ -37,7 +37,6 @@ class Discriminator(nn.Module):
         x = self.fc2(x)
         x = self.leaky_relu(x)
         x = self.fc3(x)
-        x = self.sigmoid(x)
         return x.squeeze(-1)
 
 
