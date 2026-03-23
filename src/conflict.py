@@ -130,10 +130,9 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
         for i, j in pos_pairs:
             ppr_sim = ppr_matrix[i, j].item()
             cos_sim = cos_sim_matrix[i, j].item()
-            # Normalize to [0, 1]: PPR is typically 0-1, cosine is -1 to 1, so map to [0, 1]
-            #request change: is this normalization a good idea? check logically
-            ppr_norm = max(0, min(1, ppr_sim))  # Clamp PPR to [0, 1]
-            cos_norm = (cos_sim + 1) / 2  # Map cosine from [-1, 1] to [0, 1]
+            # Map PPR from [0, 1] to [-1, 1] to preserve negative information from cosine
+            ppr_norm = ppr_sim * 2 - 1  # Map [0, 1] to [-1, 1]
+            cos_norm = cos_sim  # Keep cosine as is, already in [-1, 1]
             conflict = abs(ppr_norm - cos_norm)
             conflict_values.append(conflict)
 
@@ -146,9 +145,9 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
         if i != j and A_dense[i, j].item() == 0:  # Non-edge
             ppr_sim = ppr_matrix[i, j].item()
             cos_sim = cos_sim_matrix[i, j].item()
-            # Normalize to [0, 1]
-            ppr_norm = max(0, min(1, ppr_sim))
-            cos_norm = (cos_sim + 1) / 2
+            # Map PPR from [0, 1] to [-1, 1] to preserve negative information from cosine
+            ppr_norm = ppr_sim * 2 - 1  # Map [0, 1] to [-1, 1]
+            cos_norm = cos_sim  # Keep cosine as is, already in [-1, 1]
             conflict = abs(ppr_norm - cos_norm)
             conflict_values.append(conflict)
             neg_samples_collected += 1
