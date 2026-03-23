@@ -7,7 +7,7 @@ for soft contrastive learning.
 
 import torch
 import numpy as np
-from .conflict import compute_ppr_matrix
+from .conflict import compute_ppr_matrix, compute_cosine_similarity_matrix
 
 
 def compute_structural_weights(A, n_nodes, method='ppr', alpha=0.15,
@@ -48,21 +48,15 @@ def compute_attribute_weights(X):
     """
     Compute attribute weight matrix using cosine similarity on row-normalized features.
 
-    Since X is already row-normalized, cosine similarity reduces to dot product.
-
     Args:
         X (torch.Tensor): Row-normalized feature matrix, shape (N, D)
 
     Returns:
         torch.Tensor: Attribute weight matrix W_a, shape (N, N), row-normalized
     """
-    # X is row-normalized, so cosine sim = X @ X.T
-    W_a = torch.mm(X, X.t())
+    # Compute cosine similarity using the dedicated function
+    W_a = compute_cosine_similarity_matrix(X)
 
-    # Clamp to [-1, 1]
-    W_a = torch.clamp(W_a, -1.0, 1.0)
-
-    # Shift to [0, 1] if needed (but keep as-is for now, negative values okay)
     # Make sure values are non-negative by taking ReLU
     W_a = torch.relu(W_a)
 
