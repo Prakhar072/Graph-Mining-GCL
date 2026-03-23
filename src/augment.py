@@ -60,9 +60,9 @@ def mask_features(X, p_f):
     N, D = X.shape
 
     # Create mask for features to keep using Bernoulli distribution
-    # Each feature dimension is kept with probability (1 - p_f)
+    # Each feature for each node is kept independently with probability (1 - p_f)
     keep_prob = 1.0 - p_f
-    keep_mask = torch.bernoulli(torch.full((D,), keep_prob, device=X.device)).bool()
+    keep_mask = torch.bernoulli(torch.full((N, D), keep_prob, device=X.device)).bool()
 
     # Apply mask to features - this creates a new tensor, not in-place
     X_masked = X * keep_mask.float()
