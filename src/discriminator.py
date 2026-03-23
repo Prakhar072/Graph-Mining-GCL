@@ -63,6 +63,7 @@ def get_eigenvectors(A_norm, t=64, device=None):
             from scipy.sparse.linalg import eigsh
             import scipy.sparse as sp
 
+            #request knowledge: why are we hardcoding cpu here
             if A_norm.is_sparse:
                 A_scipy = sp.coo_matrix(
                     (A_norm.coalesce().values().cpu().numpy(),

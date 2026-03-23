@@ -10,11 +10,13 @@ import torch
 import torch.nn.functional as F
 
 # Try relative import if available, otherwise absolute
+#request change: should be able to use proper import now that we are in the same package
 try:
     from .spart import spart_similarity
 except ImportError:
     from spart import spart_similarity
 
+# request rewrites: we are implementing something completely different from the outlined methodology
 
 def soft_contrastive_loss(H, W, tau, m):
     """

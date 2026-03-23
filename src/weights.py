@@ -36,7 +36,7 @@ def compute_structural_weights(A, n_nodes, method='ppr', alpha=0.15,
     else:
         raise ValueError(f"Unknown method: {method}")
 
-    # Row-normalize (should already be normalized, but ensure)
+    # since ppr is computed without row normalziation, we need to row-normalize it here
     row_sums = W_s.sum(dim=1, keepdim=True)
     row_sums = torch.clamp(row_sums, min=1e-8)
     W_s = W_s / row_sums

@@ -36,6 +36,7 @@ def compute_ppr_matrix(A_norm, num_nodes, alpha=0.15, num_iterations=10, device=
     H = torch.eye(num_nodes, dtype=A_norm.dtype, device=device)
 
     # Handle sparse tensor
+    #request change: if we are using dense vector anyway might as well compute it properly from the start instead of converting from sparse to dense
     is_sparse = A_norm.is_sparse
     if is_sparse:
         A_norm_dense = A_norm.coalesce().to_dense()
@@ -130,6 +131,7 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
             ppr_sim = ppr_matrix[i, j].item()
             cos_sim = cos_sim_matrix[i, j].item()
             # Normalize to [0, 1]: PPR is typically 0-1, cosine is -1 to 1, so map to [0, 1]
+            #request change: is this normalization a good idea? check logically
             ppr_norm = max(0, min(1, ppr_sim))  # Clamp PPR to [0, 1]
             cos_norm = (cos_sim + 1) / 2  # Map cosine from [-1, 1] to [0, 1]
             conflict = abs(ppr_norm - cos_norm)
@@ -157,27 +159,6 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
     print(f"  Conflict index C = {C:.6f}")
 
     return C
-
-
-def compute_conflict_index_batched(A, X, n_samples=10000, alpha=0.15,
-                                    batch_size=1000, device=None):
-    """
-    Compute conflict index with batched processing for memory efficiency.
-
-    Args:
-        A (torch.Tensor): Adjacency matrix
-        X (torch.Tensor): Feature matrix
-        n_samples (int): Number of samples
-        alpha (float): PPR parameter
-        batch_size (int): Batch size for processing
-        device: Computation device
-
-    Returns:
-        float: Conflict index
-    """
-    # For now, just call the standard version
-    # Can be optimized later if needed
-    return compute_conflict_index(A, X, n_samples, alpha, device)
 
 
 if __name__ == "__main__":

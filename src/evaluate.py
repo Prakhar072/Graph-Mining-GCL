@@ -35,6 +35,7 @@ def linear_evaluation(encoder, X, edge_index, y, train_ratio=0.1, n_runs=10, dev
     Returns:
         dict: Contains mean_acc, std_acc, all_accs
     """
+    # request knowledge: what is this eval() function doing? why do we need it?
     encoder.eval()
     device = torch.device(device)
 
@@ -42,7 +43,7 @@ def linear_evaluation(encoder, X, edge_index, y, train_ratio=0.1, n_runs=10, dev
     with torch.no_grad():
         h = encoder(X.to(device), edge_index.to(device))
         h = h.cpu().numpy()
-
+    #request change: more cpu hardcoding and should be converting to numpy here instead of later
     y_np = y.cpu().numpy()
     N = len(y_np)
 
