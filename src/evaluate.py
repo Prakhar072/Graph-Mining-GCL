@@ -8,8 +8,8 @@ classifier on top of frozen encoder outputs.
 import torch
 import torch.nn as nn
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import f1_score
 
 
 def linear_evaluation(encoder, X, edge_index, y, train_ratio=0.1, n_runs=10, device='cpu'):
@@ -62,22 +62,25 @@ def linear_evaluation(encoder, X, edge_index, y, train_ratio=0.1, n_runs=10, dev
         X_test = h[test_idx]
         y_test = y_np[test_idx]
 
-        # Train logistic regression
-        clf = LogisticRegression(max_iter=1000, random_state=run)
+        # Train linear regression
+        clf = LinearRegression()
         clf.fit(X_train, y_train)
 
         # Evaluate
         y_pred = clf.predict(X_test)
-        acc = accuracy_score(y_test, y_pred)
-        accuracies.append(acc)
+        # Convert continuous predictions to class labels via argmax for multi-class
+        if len(y_test.shape) == 1:
+            y_pred = np.argmax(y_pred, axis=1) if y_pred.ndim > 1 else (y_pred > 0.5).astype(int)
+        f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+        accuracies.append(f1)
 
-    mean_acc = np.mean(accuracies)
-    std_acc = np.std(accuracies)
+    mean_f1 = np.mean(accuracies)
+    std_f1 = np.std(accuracies)
 
     return {
-        'mean_acc': mean_acc,
-        'std_acc': std_acc,
-        'all_accs': accuracies,
+        'mean_f1': mean_f1,
+        'std_f1': std_f1,
+        'all_f1_scores': accuracies,
     }
 
 
@@ -104,7 +107,7 @@ def evaluate_multiple_runs(encoder, X, edge_index, y, n_runs=5, device='cpu'):
         eval_result = linear_evaluation(encoder, X, edge_index, y, train_ratio=ratio, n_runs=n_runs, device=device)
 
         results[ratio] = eval_result
-        print(f"  Mean accuracy: {eval_result['mean_acc']:.4f} +/- {eval_result['std_acc']:.4f}")
+        print(f"  Mean F1 score: {eval_result['mean_f1']:.4f} +/- {eval_result['std_f1']:.4f}")
 
     return results
 
@@ -157,21 +160,31 @@ def evaluate_with_different_train_sizes(encoder, X, edge_index, y, device='cpu')
     y_test = y_np[test_idx]
 
     # Train classifier
-    clf = LogisticRegression(max_iter=1000)
+    clf = LinearRegression()
     clf.fit(X_train, y_train)
 
     # Get predictions on validation set to optionally tune hyperparameters
     y_val_pred = clf.predict(X_val)
-    val_acc = accuracy_score(y_val, y_val_pred)
+    # Convert continuous predictions to class labels via argmax for multi-class
+    if y_val_pred.ndim > 1:
+        y_val_pred = np.argmax(y_val_pred, axis=1)
+    else:
+        y_val_pred = (y_val_pred > 0.5).astype(int)
+    val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
 
     # Evaluate on test set
     y_test_pred = clf.predict(X_test)
-    test_acc = accuracy_score(y_test, y_test_pred)
+    # Convert continuous predictions to class labels via argmax for multi-class
+    if y_test_pred.ndim > 1:
+        y_test_pred = np.argmax(y_test_pred, axis=1)
+    else:
+        y_test_pred = (y_test_pred > 0.5).astype(int)
+    test_f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
 
-    print(f"Validation accuracy: {val_acc:.4f}")
-    print(f"Test accuracy: {test_acc:.4f}")
+    print(f"Validation F1 score: {val_f1:.4f}")
+    print(f"Test F1 score: {test_f1:.4f}")
 
-    return test_acc
+    return test_f1
 
 
 if __name__ == "__main__":
@@ -196,5 +209,5 @@ if __name__ == "__main__":
     print("Running linear evaluation...")
     results = linear_evaluation(encoder, X, edge_index, y, train_ratio=0.1, n_runs=3)
 
-    print(f"Mean accuracy: {results['mean_acc']:.4f} +/- {results['std_acc']:.4f}")
+    print(f"Mean F1 score: {results['mean_f1']:.4f} +/- {results['std_f1']:.4f}")
     print("Test passed!")
