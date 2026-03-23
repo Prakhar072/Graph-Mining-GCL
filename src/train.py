@@ -490,6 +490,9 @@ def train(dataset_name, device='cpu', **kwargs):
     # Pre-training
     pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir)
 
+    # Use the trained encoder from the model
+    encoder = model.encoder
+
     # Discriminator pre-training
     discriminator = Discriminator(cfg.out_dim + cfg.t, cfg.hidden_dim).to(device)
     optimizer_disc_pretrain = optim.Adam(discriminator.parameters(), lr=cfg.lr_disc)
