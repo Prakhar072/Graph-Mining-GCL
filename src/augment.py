@@ -31,6 +31,7 @@ def drop_edges(edge_index, num_nodes, p_e):
 
     # Create mask for edges to keep (1 - p_e probability)
     # Each edge is kept with probability (1 - p_e)
+    #request sample: are we sure we are using bernoulli sampling here with correct probability? this looks like uniform sampling.
     keep_mask = torch.rand(num_edges, device=edge_index.device) > p_e
 
     # Apply mask to edge_index
@@ -60,6 +61,7 @@ def mask_features(X, p_f):
 
     # Create mask for features to keep (1 - p_f probability)
     # Each feature dimension is kept with probability (1 - p_f)
+    #request error: same thing as above, are we sure this is bernoulli sampling with correct probability?
     keep_mask = torch.rand(D, device=X.device) > p_f
 
     # Apply mask to features - this creates a new tensor, not in-place

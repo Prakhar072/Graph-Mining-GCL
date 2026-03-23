@@ -10,7 +10,7 @@ and improves learning stability.
 import torch
 import torch.nn.functional as F
 
-
+#request change: function should take number of partitions k as input not m
 def spart_similarity(H1, H2, m, tau):
     """
     Compute exponential partitioned similarity between two batches of representations.
@@ -61,6 +61,7 @@ def spart_similarity(H1, H2, m, tau):
     # Use logsumexp for numerical stability
     # logsumexp(x) = log(sum(exp(x))) computed stably
     # We want: (1/K) * sum(exp(K*S_k/tau)) = exp(logsumexp(log_S_list) - log(K))
+    #request change: formula seems off, should it be exp(logsumexp(log_S_list) - log(K)) instead of exp(logsumexp(log_S_list) - log(torch.tensor(K)))?
     log_S_stacked = torch.stack(log_S_list, dim=0)  # shape: (K, B, B)
     log_S_part = torch.logsumexp(log_S_stacked, dim=0) - torch.log(torch.tensor(K, dtype=H1.dtype, device=H1.device))
 

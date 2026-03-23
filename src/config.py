@@ -60,8 +60,8 @@ class Config:
     checkpoint_dir: str = './checkpoints'
 
 
-# Dataset-specific configurations
 DATASET_CONFIGS = {
+    #dictionary of dictionaries, used to override defaults after the dataset is loaded.
     'cora': {
         'tau': 0.8,
         'm': 128,
@@ -154,7 +154,8 @@ def get_config(dataset_name: str, **kwargs) -> Config:
         raise ValueError(f"Unknown dataset: {dataset_name}. Available: {list(DATASET_CONFIGS.keys())}")
 
     # Create base config
-    cfg = Config(dataset=dataset_name)
+    #change 1: changed to dataset_lower.
+    cfg = Config(dataset=dataset_lower)
 
     # Apply dataset-specific overrides
     dataset_params = DATASET_CONFIGS[dataset_lower]
@@ -173,7 +174,7 @@ def get_config(dataset_name: str, **kwargs) -> Config:
 
 
 def print_config(cfg: Config) -> None:
-    """Pretty print configuration."""
+    """print configuration."""
     print("=" * 60)
     print(f"Configuration for {cfg.dataset}")
     print("=" * 60)

@@ -34,7 +34,7 @@ def load_dataset(name, normalize_adj=True, normalize_features=True):
 
     Returns:
         tuple: (A_normed, X_normed, y, edge_index, N, D)
-            - A_normed: Normalized adjacency matrix (sparse tensor or None)
+            - A_normed: Normalized adjacency matrix 
             - X_normed: Row-normalized feature matrix, shape (N, D)
             - y: Node labels, shape (N,)
             - edge_index: Edge indices, shape (2, num_edges)
@@ -78,7 +78,7 @@ def load_dataset(name, normalize_adj=True, normalize_features=True):
     # Extract basic information
     N = data.x.shape[0]
     D = data.x.shape[1]
-    edge_index = data.edge_index
+    edge_index = data.edge_index # looks like {[from nodes],[to nodes]}, space takes o(e) instead of o(n^2) in adjacency matrix
     y = data.y if hasattr(data, 'y') else torch.zeros(N, dtype=torch.long)
 
     # Get feature matrix
@@ -86,7 +86,7 @@ def load_dataset(name, normalize_adj=True, normalize_features=True):
 
     # Row-normalize features
     if normalize_features:
-        X_norm = torch.norm(X, p=2, dim=1, keepdim=True)
+        X_norm = torch.norm(X, p=2, dim=1, keepdim=True) #p=2 is l2 normalization, dim=1 means we are normalizing each row, keepdim=True keeps the dimensions for broadcasting.
         X_norm = torch.clamp(X_norm, min=1e-8)  # Avoid division by zero
         X = X / X_norm
 
@@ -108,9 +108,11 @@ def load_dataset(name, normalize_adj=True, normalize_features=True):
         deg_inv_sqrt[torch.isinf(deg_inv_sqrt)] = 0.0
 
         # Normalize: D^{-1/2} * A * D^{-1/2}
+        #request change 2: why are we not using the @ multiplcation here?
         edge_weight = deg_inv_sqrt[edge_index_with_loops[0]] * deg_inv_sqrt[edge_index_with_loops[1]]
 
         # Create sparse tensor for normalized adjacency
+        # stores edges as (row_indices, col_indices, values)
         A_normed = torch.sparse_coo_tensor(
             edge_index_with_loops,
             edge_weight,

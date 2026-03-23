@@ -11,6 +11,7 @@ from torch_geometric.nn import GCNConv
 
 
 class GCNEncoder(nn.Module):
+    #request knowledge: why this architecture? why 2 layers? why relu and dropout in between?
     """
     Graph Convolutional Network encoder with two layers.
 
@@ -30,7 +31,7 @@ class GCNEncoder(nn.Module):
         super(GCNEncoder, self).__init__()
 
         self.conv1 = GCNConv(in_dim, hidden_dim)
-        self.conv2 = GCNConv(hidden_dim, out_dim)
+        self.conv2 = GCNConv(hidden_dim, out_dim)       
         self.dropout = dropout
 
     def forward(self, X, edge_index):
@@ -47,14 +48,14 @@ class GCNEncoder(nn.Module):
         # First GCN layer
         h = self.conv1(X, edge_index)
         h = F.relu(h)
-        h = F.dropout(h, p=self.dropout, training=self.training)
+        h = F.dropout(h, p=self.dropout, training=self.training) #only during training
 
         # Second GCN layer
         h = self.conv2(h, edge_index)
 
         return h
 
-
+#request knowledge: why do we need a projection head? why not just use the encoder output for contrastive loss?
 class ProjectionHead(nn.Module):
     """
     Projection head for contrastive learning.
