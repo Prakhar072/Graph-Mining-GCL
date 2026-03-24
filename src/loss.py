@@ -47,7 +47,7 @@ def balanced_softmax_loss(scores, labels, n_pos, n_neg):
     return loss
 
 
-def soft_contrastive_loss(H_u, H_v, W, tau, m):
+def soft_contrastive_loss(H_u, H_v, W, tau, k):
     """
     Compute soft contrastive loss with weighted supervision.
 
@@ -61,7 +61,7 @@ def soft_contrastive_loss(H_u, H_v, W, tau, m):
         W (torch.Tensor): Soft supervision weights, shape (B, B).
                          Each row must sum to 1.
         tau (float): Temperature parameter
-        m (int): SPART partition size
+        k (int): Number of partitions for SPART
 
     Returns:
         torch.Tensor: Scalar loss value
@@ -77,9 +77,9 @@ def soft_contrastive_loss(H_u, H_v, W, tau, m):
     W = W / row_sums
 
     # Cross-view similarity: queries from u against keys from v
-    S_uv = spart_similarity(H_u, H_v, m, tau)  # shape: (B, B)
+    S_uv = spart_similarity(H_u, H_v, k, tau)  # shape: (B, B)
     # Symmetric direction: queries from v against keys from u
-    S_vu = spart_similarity(H_v, H_u, m, tau)  # shape: (B, B)
+    S_vu = spart_similarity(H_v, H_u, k, tau)  # shape: (B, B)
 
     # Compute log-softmax along dimension 1 (for each query)
     log_probs_uv = F.log_softmax(S_uv, dim=1)  # shape: (B, B)
@@ -149,7 +149,7 @@ def _test_soft_contrastive_loss():
     Test soft contrastive loss computation.
     """
     B, d = 16, 128
-    m = 32
+    k = 4  # 4 partitions of size 32
     tau = 0.8
 
     # Create test data
@@ -160,7 +160,7 @@ def _test_soft_contrastive_loss():
     W_uniform = torch.ones(B, B, device=H_u.device, dtype=H_u.dtype) / B
 
     # Compute loss
-    loss = soft_contrastive_loss(H_u, H_v, W_uniform, tau, m)
+    loss = soft_contrastive_loss(H_u, H_v, W_uniform, tau, k)
 
     # Verify loss is scalar and finite
     assert torch.isfinite(loss), "Loss should be finite"

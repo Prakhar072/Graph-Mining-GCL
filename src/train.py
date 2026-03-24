@@ -11,7 +11,7 @@ from pathlib import Path
 import os
 
 from .config import get_config
-from .dataset import load_dataset, get_normalized_adjacency_dense
+from .dataset import load_dataset
 from .augment import drop_edges, mask_features
 from .encoder import GCNEncoder, ProjectionHead, ContrastiveModel
 from .conflict import compute_conflict_index
@@ -220,7 +220,7 @@ def pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir)
                 z_v_batch,
                 W_batch_sliced.to(device),
                 cfg.tau,
-                cfg.m,
+                cfg.k,
             )
 
             # Backward pass
@@ -376,7 +376,7 @@ def finetune_phase(
                 H_v_batch = H_v[batch_nodes]
 
                 # Compute calibrated cross-view loss
-                loss = soft_contrastive_loss(H_u_batch, H_v_batch, W_cali, cfg.tau, cfg.m)
+                loss = soft_contrastive_loss(H_u_batch, H_v_batch, W_cali, cfg.tau, cfg.k)
 
                 # Backward pass
                 optimizer_enc.zero_grad()
@@ -469,8 +469,8 @@ def train(dataset_name, device='cpu', **kwargs):
     X = X.to(device)
     edge_index = edge_index.to(device)
 
-    # Get dense normalized adjacency for conflict/weights computation
-    A_norm_dense = get_normalized_adjacency_dense(edge_index, N, dtype=X.dtype)
+    # Use cached dense normalized adjacency from dataset loader
+    A_norm_dense = A_norm.to(device)
 
     # Compute conflict index
     print("\nComputing conflict index...")
