@@ -347,22 +347,18 @@ def finetune_phase(
                 H_u = encoder(X_u, edge_idx_u)
                 H_v = encoder(X_v, edge_idx_v)
 
-                # Build fusion vectors (detach to prevent gradients through discriminator evaluation)
                 C_struct_dev = C_struct.to(device)
-                Z_u = build_fusion_vectors(H_u.detach(), C_struct_dev)
-                Z_v = build_fusion_vectors(H_v.detach(), C_struct_dev)
-
-                # Get discriminator scores
-                batch_nodes_expanded = batch_nodes.unsqueeze(1).expand(-1, B)
-                pair_indices = torch.stack([
-                    batch_nodes_expanded.reshape(-1),
-                    batch_nodes.repeat(B)
-                ], dim=1)
-
                 with torch.no_grad():
-                    scores_u = get_pair_scores(discriminator, Z_u, pair_indices)
-                    scores_v = get_pair_scores(discriminator, Z_v, pair_indices)
-                    calibration_scores = 0.5 * (scores_u + scores_v)
+                    discriminator.eval()
+                    Z_u = build_fusion_vectors(H_u[batch_nodes].detach(), C_struct_dev[batch_nodes])
+                    pair_indices = torch.stack(
+                        [
+                            torch.arange(B, device=device).repeat_interleave(B),
+                            torch.arange(B, device=device).repeat(B),
+                        ],
+                        dim=1,
+                    )
+                    calibration_scores = get_pair_scores(discriminator, Z_u, pair_indices)
 
                 # Build calibrated weights using SOFT thresholding (not hard)
                 # Use sigmoid to convert scores to soft weights in [0, 1]
