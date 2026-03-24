@@ -135,8 +135,6 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
     C = np.mean(conflict_values) if conflict_values else 0.0
     C = C / 2
 
-    print(f"  Conflict index C = {C:.6f}")
-
     return C
 
 
