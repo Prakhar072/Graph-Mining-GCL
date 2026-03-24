@@ -150,9 +150,9 @@ def main():
         print("="*70)
         for ratio, result in results.items():
             print(f"\nTrain ratio {ratio}:")
-            print(f"  Mean accuracy: {result['mean_acc']:.4f}")
-            print(f"  Std dev:      {result['std_acc']:.4f}")
-            print(f"  Raw scores:   {[f'{acc:.4f}' for acc in result['all_accs']]}")
+            print(f"  Mean F1 score: {result['mean_f1']:.4f}")
+            print(f"  Std dev:       {result['std_f1']:.4f}")
+            print(f"  Raw scores:    {[f'{f1:.4f}' for f1 in result['all_f1_scores']]}")
 
     print("\n" + "="*70)
     print("COMPLETE!")
