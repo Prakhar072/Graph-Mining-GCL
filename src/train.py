@@ -205,15 +205,23 @@ def pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir)
             edge_idx_v = drop_edges(edge_index, N, cfg.p_e).to(device)
             X_v = mask_features(X, cfg.p_f).to(device)
 
-            # Get representation for batch from view u
+            # Get representations for both views
             z_u = model(X_u, edge_idx_u)
+            z_v = model(X_v, edge_idx_v)
             z_u_batch = z_u[batch_nodes]
+            z_v_batch = z_v[batch_nodes]
 
             # Get soft weights for batch
             W_batch_sliced = W_total[batch_nodes][:, batch_nodes]
 
-            # Compute loss
-            loss = soft_contrastive_loss(z_u_batch, W_batch_sliced.to(device), cfg.tau, cfg.m)
+            # Compute cross-view contrastive loss
+            loss = soft_contrastive_loss(
+                z_u_batch,
+                z_v_batch,
+                W_batch_sliced.to(device),
+                cfg.tau,
+                cfg.m,
+            )
 
             # Backward pass
             optimizer.zero_grad()
@@ -352,7 +360,9 @@ def finetune_phase(
                 ], dim=1)
 
                 with torch.no_grad():
-                    scores = get_pair_scores(discriminator, Z_u, pair_indices)
+                    scores_u = get_pair_scores(discriminator, Z_u, pair_indices)
+                    scores_v = get_pair_scores(discriminator, Z_v, pair_indices)
+                    scores = 0.5 * (scores_u + scores_v)
 
                 # Build calibrated weights using SOFT thresholding (not hard)
                 # Use sigmoid to convert scores to soft weights in [0, 1]
@@ -361,11 +371,12 @@ def finetune_phase(
                 W_batch_sliced = W_total[batch_nodes][:, batch_nodes].to(device)
                 W_cali = W_batch_sliced * soft_weights.reshape(B, B)
 
-                # Get batch representations for current view
+                # Get batch representations for both views
                 H_u_batch = H_u[batch_nodes]
+                H_v_batch = H_v[batch_nodes]
 
-                # Compute calibrated loss
-                loss = soft_contrastive_loss(H_u_batch, W_cali, cfg.tau, cfg.m)
+                # Compute calibrated cross-view loss
+                loss = soft_contrastive_loss(H_u_batch, H_v_batch, W_cali, cfg.tau, cfg.m)
 
                 # Backward pass
                 optimizer_enc.zero_grad()

@@ -47,7 +47,7 @@ def balanced_softmax_loss(scores, labels, n_pos, n_neg):
     return loss
 
 
-def soft_contrastive_loss(H, W, tau, m):
+def soft_contrastive_loss(H_u, H_v, W, tau, m):
     """
     Compute soft contrastive loss with weighted supervision.
 
@@ -56,7 +56,8 @@ def soft_contrastive_loss(H, W, tau, m):
     that weight how much node j should be pulled toward node i.
 
     Args:
-        H (torch.Tensor): Batch of representations, shape (B, d)
+        H_u (torch.Tensor): Batch of representations from view u, shape (B, d)
+        H_v (torch.Tensor): Batch of representations from view v, shape (B, d)
         W (torch.Tensor): Soft supervision weights, shape (B, B).
                          Each row must sum to 1.
         tau (float): Temperature parameter
@@ -65,7 +66,8 @@ def soft_contrastive_loss(H, W, tau, m):
     Returns:
         torch.Tensor: Scalar loss value
     """
-    B, d = H.shape
+    B, d = H_u.shape
+    assert H_v.shape == (B, d), f"H_v must have shape ({B}, {d}), got {H_v.shape}"
     assert W.shape == (B, B), f"W must have shape ({B}, {B}), got {W.shape}"
 
     # Ensure W is row-stochastic (each row sums to 1)
@@ -74,14 +76,20 @@ def soft_contrastive_loss(H, W, tau, m):
     row_sums = torch.clamp(row_sums, min=1e-8)  # Avoid division by zero
     W = W / row_sums
 
-    # Compute SPART similarity
-    S = spart_similarity(H, H, m, tau)  # shape: (B, B)
+    # Cross-view similarity: queries from u against keys from v
+    S_uv = spart_similarity(H_u, H_v, m, tau)  # shape: (B, B)
+    # Symmetric direction: queries from v against keys from u
+    S_vu = spart_similarity(H_v, H_u, m, tau)  # shape: (B, B)
 
     # Compute log-softmax along dimension 1 (for each query)
-    log_probs = F.log_softmax(S, dim=1)  # shape: (B, B)
+    log_probs_uv = F.log_softmax(S_uv, dim=1)  # shape: (B, B)
+    log_probs_vu = F.log_softmax(S_vu, dim=1)  # shape: (B, B)
 
-    # Compute weighted loss: -mean over all entries of W[i,j] * log_probs[i,j]
-    loss = -(W * log_probs).sum() / B
+    # Compute weighted loss for both directions and average.
+    # For v->u, weights are transposed to preserve (query, key) semantics.
+    loss_uv = -(W * log_probs_uv).sum() / B
+    loss_vu = -(W.t() * log_probs_vu).sum() / B
+    loss = 0.5 * (loss_uv + loss_vu)
 
     return loss
 
@@ -145,13 +153,14 @@ def _test_soft_contrastive_loss():
     tau = 0.8
 
     # Create test data
-    H = torch.randn(B, d, requires_grad=True)
+    H_u = torch.randn(B, d, requires_grad=True)
+    H_v = torch.randn(B, d, requires_grad=True)
 
     # Create uniform weights (all nodes are equally weighted)
-    W_uniform = torch.ones(B, B, device=H.device, dtype=H.dtype) / B
+    W_uniform = torch.ones(B, B, device=H_u.device, dtype=H_u.dtype) / B
 
     # Compute loss
-    loss = soft_contrastive_loss(H, W_uniform, tau, m)
+    loss = soft_contrastive_loss(H_u, H_v, W_uniform, tau, m)
 
     # Verify loss is scalar and finite
     assert torch.isfinite(loss), "Loss should be finite"
@@ -159,12 +168,14 @@ def _test_soft_contrastive_loss():
 
     # Test that loss is differentiable
     loss.backward()
-    assert H.grad is not None, "Gradient should be computed for H"
-    assert H.grad.shape == H.shape, "Gradient shape should match H shape"
+    assert H_u.grad is not None, "Gradient should be computed for H_u"
+    assert H_v.grad is not None, "Gradient should be computed for H_v"
+    assert H_u.grad.shape == H_u.shape, "Gradient shape should match H_u shape"
+    assert H_v.grad.shape == H_v.shape, "Gradient shape should match H_v shape"
 
     print("[PASS] Loss computation passed")
     print(f"[PASS] Loss value: {loss.item():.6f}")
-    print(f"[PASS] Gradient shape: {H.grad.shape}")
+    print(f"[PASS] Gradient shapes: H_u={H_u.grad.shape}, H_v={H_v.grad.shape}")
 
     return True
 
