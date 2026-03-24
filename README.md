@@ -1,4 +1,4 @@
-# Conflict-Conditioned Soft Contrastive Learning Framework for Graphs
+# Conflict-Aware Soft Contrastive Learning on Graphs
 
 A PyTorch implementation of a novel graph contrastive learning framework that adaptively weights structural and attribute-based supervision signals based on the graph's homophily-heterophily regime. This framework bridges homophilic and heterophilic graphs through a conflict index-driven weight calibration mechanism.
 
