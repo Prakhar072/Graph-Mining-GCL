@@ -8,7 +8,7 @@ classifier on top of frozen encoder outputs.
 import torch
 import torch.nn as nn
 import numpy as np
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
 
 
@@ -62,15 +62,16 @@ def linear_evaluation(encoder, X, edge_index, y, train_ratio=0.1, n_runs=10, dev
         X_test = h[test_idx]
         y_test = y_np[test_idx]
 
-        # Train linear regression
-        clf = LinearRegression()
+        # Train linear classifier for multi-class targets
+        clf = LogisticRegression(
+            max_iter=1000,
+            solver='lbfgs',
+            random_state=run
+        )
         clf.fit(X_train, y_train)
 
         # Evaluate
         y_pred = clf.predict(X_test)
-        # Convert continuous predictions to class labels via argmax for multi-class
-        if len(y_test.shape) == 1:
-            y_pred = np.argmax(y_pred, axis=1) if y_pred.ndim > 1 else (y_pred > 0.5).astype(int)
         f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
         accuracies.append(f1)
 
@@ -160,25 +161,19 @@ def evaluate_with_different_train_sizes(encoder, X, edge_index, y, device='cpu')
     y_test = y_np[test_idx]
 
     # Train classifier
-    clf = LinearRegression()
+    clf = LogisticRegression(
+        max_iter=1000,
+        solver='lbfgs',
+        random_state=42
+    )
     clf.fit(X_train, y_train)
 
     # Get predictions on validation set to optionally tune hyperparameters
     y_val_pred = clf.predict(X_val)
-    # Convert continuous predictions to class labels via argmax for multi-class
-    if y_val_pred.ndim > 1:
-        y_val_pred = np.argmax(y_val_pred, axis=1)
-    else:
-        y_val_pred = (y_val_pred > 0.5).astype(int)
     val_f1 = f1_score(y_val, y_val_pred, average='weighted', zero_division=0)
 
     # Evaluate on test set
     y_test_pred = clf.predict(X_test)
-    # Convert continuous predictions to class labels via argmax for multi-class
-    if y_test_pred.ndim > 1:
-        y_test_pred = np.argmax(y_test_pred, axis=1)
-    else:
-        y_test_pred = (y_test_pred > 0.5).astype(int)
     test_f1 = f1_score(y_test, y_test_pred, average='weighted', zero_division=0)
 
     print(f"Validation F1 score: {val_f1:.4f}")
