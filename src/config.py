@@ -29,7 +29,7 @@ class Config:
 
     # Contrastive learning
     tau: float = 0.8  # Temperature
-    m: int = 128  # SPART partition size
+    k: int = 4  # Number of partitions for SPART
 
     # Discriminator
     t: int = 64  # Number of eigenvectors
@@ -64,7 +64,7 @@ DATASET_CONFIGS = {
     #dictionary of dictionaries, used to override defaults after the dataset is loaded.
     'cora': {
         'tau': 0.8,
-        'm': 128,
+        'k': 4,
         'pretrain_enc_epochs': 300,
         'n_iterations': 20,
         'finetune_enc_epochs': 15,
@@ -76,7 +76,7 @@ DATASET_CONFIGS = {
     },
     'citeseer': {
         'tau': 0.8,
-        'm': 128,
+        'k': 4,
         'pretrain_enc_epochs': 300,
         'n_iterations': 20,
         'finetune_enc_epochs': 15,
@@ -88,7 +88,7 @@ DATASET_CONFIGS = {
     },
     'pubmed': {
         'tau': 0.8,
-        'm': 128,
+        'k': 4,
         'pretrain_enc_epochs': 300,
         'n_iterations': 20,
         'finetune_enc_epochs': 15,
@@ -100,7 +100,7 @@ DATASET_CONFIGS = {
     },
     'chameleon': {
         'tau': 1.2,  # Higher temp for heterophilic
-        'm': 128,
+        'k': 4,
         'pretrain_enc_epochs': 500,  # Increased for heterophilic
         'n_iterations': 35,  # Increased iterations
         'finetune_enc_epochs': 20,  # Longer fine-tuning per iteration
@@ -112,7 +112,7 @@ DATASET_CONFIGS = {
     },
     'squirrel': {
         'tau': 1.2,  # Higher temp for heterophilic
-        'm': 128,
+        'k': 4,
         'pretrain_enc_epochs': 500,  # Increased for heterophilic
         'n_iterations': 35,  # Increased iterations
         'finetune_enc_epochs': 20,  # Longer fine-tuning per iteration
@@ -124,7 +124,7 @@ DATASET_CONFIGS = {
     },
     'actor': {
         'tau': 1.2,  # Higher temp for heterophilic
-        'm': 128,
+        'k': 4,
         'pretrain_enc_epochs': 500,  # Increased for heterophilic
         'n_iterations': 40,  # Most iterations (highly heterophilic)
         'finetune_enc_epochs': 20,  # Longer fine-tuning per iteration

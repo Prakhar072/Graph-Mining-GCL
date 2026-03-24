@@ -213,7 +213,7 @@ def pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir)
             W_batch_sliced = W_total[batch_nodes][:, batch_nodes]
 
             # Compute loss
-            loss = soft_contrastive_loss(z_u_batch, W_batch_sliced.to(device), cfg.tau, cfg.m)
+            loss = soft_contrastive_loss(z_u_batch, W_batch_sliced.to(device), cfg.tau, cfg.k)
 
             # Backward pass
             optimizer.zero_grad()
@@ -365,7 +365,7 @@ def finetune_phase(
                 H_u_batch = H_u[batch_nodes]
 
                 # Compute calibrated loss
-                loss = soft_contrastive_loss(H_u_batch, W_cali, cfg.tau, cfg.m)
+                loss = soft_contrastive_loss(H_u_batch, W_cali, cfg.tau, cfg.k)
 
                 # Backward pass
                 optimizer_enc.zero_grad()
