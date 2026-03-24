@@ -7,6 +7,7 @@ discriminator-based calibration.
 
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
 from pathlib import Path
 import os
 
@@ -306,6 +307,8 @@ def finetune_phase(
     edge_index,
     A,
     W_total,
+    W_s,
+    C,
     C_struct,
     device,
     checkpoint_dir,
@@ -320,6 +323,34 @@ def finetune_phase(
 
     for iteration in range(cfg.n_iterations):
         print(f"\nIteration {iteration + 1}/{cfg.n_iterations}")
+
+        # Refresh attribute supervision periodically using current encoder embeddings.
+        # This makes W_a (and therefore W_total) dynamic rather than fixed to raw features.
+        if iteration % 5 == 0:
+            print("  Refreshing dynamic attribute weights (W_a) ...")
+            encoder.eval()
+            with torch.no_grad():
+                H_current = encoder(X.to(device), edge_index.to(device))
+                H_norm = F.normalize(H_current, dim=1)
+                W_a_updated = torch.mm(H_norm, H_norm.t())
+                W_a_updated = torch.relu(W_a_updated)
+
+                row_sums = W_a_updated.sum(dim=1, keepdim=True)
+                zero_rows = row_sums.squeeze(1) <= 1e-12
+                if zero_rows.any():
+                    idx = torch.nonzero(zero_rows, as_tuple=False).squeeze(1)
+                    W_a_updated[idx, idx] = 1.0
+                    row_sums = W_a_updated.sum(dim=1, keepdim=True)
+
+                W_a_updated = W_a_updated / row_sums.clamp(min=1e-8)
+
+                W_total = compute_combined_weights(
+                    W_s.to(device),
+                    W_a_updated,
+                    C,
+                    alpha=cfg.alpha,
+                    beta=cfg.beta,
+                ).to(device)
 
         # STEP A: Update encoder
         print("  Updating encoder...")
@@ -532,6 +563,8 @@ def train(dataset_name, device='cpu', **kwargs):
         edge_index,
         A_norm_dense,
         W_total,
+        W_s,
+        C,
         C_struct,
         device,
         checkpoint_dir,
