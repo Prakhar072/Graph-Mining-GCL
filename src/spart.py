@@ -24,17 +24,23 @@ def spart_similarity_logits(H1, H2, k, tau):
     H1_shuffled = H1[:, perm]
     H2_shuffled = H2[:, perm]
 
-    m = d // k
-    assert m > 0, f"Number of partitions k={k} must be <= feature dimension d={d}"
+    assert k <= d, f"Number of partitions k={k} must be <= feature dimension d={d}"
+
+    # Build remainder-aware partition boundaries so all d dimensions are used.
+    # Example: d=1433, k=4 -> chunk sizes [359, 358, 358, 358].
+    base = d // k
+    rem = d % k
+    chunk_sizes = [base + (1 if i < rem else 0) for i in range(k)]
 
     log_S_list = []
+    start_idx = 0
     for i in range(k):
-        start_idx = i * m
-        end_idx = start_idx + m
+        end_idx = start_idx + chunk_sizes[i]
         H1_i = H1_shuffled[:, start_idx:end_idx]
         H2_i = H2_shuffled[:, start_idx:end_idx]
         S_i = torch.mm(H1_i, H2_i.t())
         log_S_list.append(k * S_i / tau)
+        start_idx = end_idx
 
     log_S_stacked = torch.stack(log_S_list, dim=0)
     log_S_part = torch.logsumexp(log_S_stacked, dim=0) - torch.log(
