@@ -87,6 +87,7 @@ class ProjectionHead(nn.Module):
         z = self.fc1(h)
         z = F.relu(z)
         z = self.fc2(z)
+        z = F.normalize(z, p=2, dim=1)
 
         return z
 
