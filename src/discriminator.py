@@ -139,19 +139,25 @@ def build_pretrain_pairs(A, X, k=10):
             if j.item() in knn_set:
                 pos_pairs.append([i, j.item()])
 
-    pos_pairs = torch.tensor(pos_pairs, dtype=torch.long, device=device)
+    if len(pos_pairs) > 0:
+        pos_pairs = torch.tensor(pos_pairs, dtype=torch.long, device=device)
+    else:
+        pos_pairs = torch.empty((0, 2), dtype=torch.long, device=device)
 
-    neg_pairs = []
     neg_target = max(len(pos_pairs), 1)
 
-    while len(neg_pairs) < neg_target:
-        i = torch.randint(0, N, (1,)).item()
-        j = torch.randint(0, N, (1,)).item()
+    # Build all valid non-edge pairs once, then sample directly.
+    # This avoids unbounded rejection sampling when negatives are rare.
+    neg_mask = (A_dense == 0)
+    neg_mask.fill_diagonal_(False)
+    neg_candidates = neg_mask.nonzero(as_tuple=False)
 
-        if i != j and A_dense[i, j].item() == 0:
-            neg_pairs.append([i, j])
-
-    neg_pairs = torch.tensor(neg_pairs, dtype=torch.long, device=device)
+    if neg_candidates.shape[0] == 0:
+        neg_pairs = torch.empty((0, 2), dtype=torch.long, device=device)
+    else:
+        num_to_sample = min(neg_target, neg_candidates.shape[0])
+        perm = torch.randperm(neg_candidates.shape[0], device=device)[:num_to_sample]
+        neg_pairs = neg_candidates[perm]
 
     return pos_pairs, neg_pairs
 
