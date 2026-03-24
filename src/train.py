@@ -189,10 +189,9 @@ def pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir)
     N = X.shape[0]
     batch_size = cfg.batch_size
 
-    # Create batch sampler
-    batch_indices = torch.randperm(N).split(batch_size)
-
     for epoch in range(cfg.pretrain_enc_epochs):
+        # Re-shuffle node order each epoch for diverse negative sampling
+        batch_indices = torch.randperm(N).split(batch_size)
         total_loss = 0
 
         for batch_idx, batch_nodes in enumerate(batch_indices):
