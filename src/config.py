@@ -19,7 +19,7 @@ class Config:
 
     # Data dimensions
     in_dim: int = None  # Set by dataset
-    hidden_dim: int = 64
+    hidden_dim: int = 256
     out_dim: int = 256
     proj_dim: int = 256
 
