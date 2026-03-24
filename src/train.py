@@ -212,6 +212,8 @@ def pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir)
 
             # Get soft weights for batch
             W_batch_sliced = W_total[batch_nodes][:, batch_nodes]
+            row_sums = W_batch_sliced.sum(dim=1, keepdim=True).clamp(min=1e-8)
+            W_batch_sliced = W_batch_sliced / row_sums
 
             # Compute cross-view contrastive loss
             loss = soft_contrastive_loss(
