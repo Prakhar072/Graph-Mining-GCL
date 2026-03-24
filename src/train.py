@@ -362,12 +362,12 @@ def finetune_phase(
                 with torch.no_grad():
                     scores_u = get_pair_scores(discriminator, Z_u, pair_indices)
                     scores_v = get_pair_scores(discriminator, Z_v, pair_indices)
-                    scores = 0.5 * (scores_u + scores_v)
+                    calibration_scores = 0.5 * (scores_u + scores_v)
 
                 # Build calibrated weights using SOFT thresholding (not hard)
                 # Use sigmoid to convert scores to soft weights in [0, 1]
                 # This prevents complete zeroing out of weight matrix
-                soft_weights = torch.sigmoid((scores - cfg.eta) * 10)  # Sharper sigmoid centered at eta
+                soft_weights = torch.sigmoid((calibration_scores - cfg.eta) * 10)  # Sharper sigmoid centered at eta
                 W_batch_sliced = W_total[batch_nodes][:, batch_nodes].to(device)
                 W_cali = W_batch_sliced * soft_weights.reshape(B, B)
 
