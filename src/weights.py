@@ -60,8 +60,16 @@ def compute_attribute_weights(X):
     # Make sure values are non-negative by taking ReLU
     W_a = torch.relu(W_a)
 
-    # Row-normalize
+    # Row-normalize with a robust fallback:
+    # if a row is all zeros (possible on heterophilic/sparse-feature nodes),
+    # assign a self-weight of 1 so every row is a valid probability distribution.
     row_sums = W_a.sum(dim=1, keepdim=True)
+    zero_rows = row_sums.squeeze(1) <= 1e-12
+    if zero_rows.any():
+        idx = torch.nonzero(zero_rows, as_tuple=False).squeeze(1)
+        W_a[idx, idx] = 1.0
+        row_sums = W_a.sum(dim=1, keepdim=True)
+
     row_sums = torch.clamp(row_sums, min=1e-8)
     W_a = W_a / row_sums
 
