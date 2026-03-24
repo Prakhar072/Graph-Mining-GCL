@@ -20,8 +20,8 @@ def linear_evaluation(encoder, X, edge_index, y, train_ratio=0.1, n_runs=10, dev
     - Extract encoder representations H = encoder(X, edge_index)
     - Split nodes into train (train_ratio) and test (1 - train_ratio)
     - Fit LogisticRegression on training representations
-    - Evaluate accuracy on test representations
-    - Return mean and std accuracy over n_runs
+    - Evaluate weighted F1 score on test representations
+    - Return mean and std weighted F1 over n_runs
 
     Args:
         encoder (nn.Module): Trained encoder model
@@ -33,7 +33,7 @@ def linear_evaluation(encoder, X, edge_index, y, train_ratio=0.1, n_runs=10, dev
         device (str): Device to use
 
     Returns:
-        dict: Contains mean_acc, std_acc, all_accs
+        dict: Contains mean_f1, std_f1, all_f1_scores
     """
     # request knowledge: what is this eval() function doing? why do we need it?
     encoder.eval()
@@ -126,7 +126,7 @@ def evaluate_with_different_train_sizes(encoder, X, edge_index, y, device='cpu')
         device (str): Device
 
     Returns:
-        float: Final test accuracy
+        float: Final test weighted F1 score
     """
     encoder.eval()
     device = torch.device(device)
