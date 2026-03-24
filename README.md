@@ -18,6 +18,7 @@ This project implements a comprehensive framework for self-supervised learning o
 ## Installation
 
 ### Requirements
+
 - Python 3.8+
 - PyTorch 1.9+
 - PyTorch Geometric 1.7+
@@ -109,34 +110,41 @@ python main.py --dataset citeseer --seed 123
 ### 1. Dataset Loading (`dataset.py`)
 
 Loads from PyTorch Geometric and applies preprocessing:
-- **Adjacency Normalization**: D^{-1/2} * (A + I) * D^{-1/2}
+
+- **Adjacency Normalization**: D^{-1/2} _ (A + I) _ D^{-1/2}
 - **Feature Normalization**: Row-wise L2 normalization
 - **Caching**: Preprocessed data cached to `cache/` directory
 
 **Datasets**:
+
 - **Homophilic**: Cora, Citeseer, Pubmed
 - **Heterophilic**: Chameleon, Squirrel, Actor
 
 ### 2. Graph Augmentation (`augment.py`)
 
 Creates two augmented views per graph:
+
 - **Edge Dropping**: Bernoulli sampling with probability p_e (default: 0.3)
 - **Feature Masking**: Independent feature dimension dropout with probability p_f (default: 0.3)
 
 ### 3. SPART Similarity (`spart.py`)
 
 Exponential partitioned similarity kernel:
+
 ```
 S_SPART = (1/K) * sum_k exp(K * S_k / tau)
 ```
+
 where each S_k is the similarity of a feature partition, providing robustness via Jensen's inequality.
 
 ### 4. Conflict Index (`conflict.py`)
 
 Measures graph homophily-heterophily regime:
+
 ```
 C = mean_pairs |PPR(i,j) - cos_sim(i,j)|
 ```
+
 - **Structural Similarity**: Personalized PageRank (PPR) with α=0.15
 - **Attribute Similarity**: Cosine similarity (dot product for row-normalized features)
 - Computed on ~10K sampled pairs (half edges, half non-edges)
@@ -144,28 +152,34 @@ C = mean_pairs |PPR(i,j) - cos_sim(i,j)|
 ### 5. Weight Matrices (`weights.py`)
 
 Generates supervision weights:
+
 - **W_s**: Structural weights from PPR similarity
 - **W_a**: Attribute weights from cosine similarity
 - Both row-normalized (sum to 1 per row)
 
 **Combined weights**:
+
 ```
 W_total = (1 - lambda_C) * W_s + lambda_C * W_a
 lambda_C = sigmoid(alpha * (C - beta))
 ```
+
 where lambda_C adapts based on conflict index.
 
 ### 6. Soft Contrastive Loss (`loss.py`)
 
 Weighted contrastive loss with soft targets:
+
 ```
 L = -mean_i( sum_j W[i,j] * log_softmax(S[i,j]) )
 ```
+
 where S is computed using SPART similarity and W provides adaptive weighting.
 
 ### 7. GCN Encoder (`encoder.py`)
 
 Two-layer Graph Convolutional Network:
+
 - **Architecture**: in_dim → hidden_dim → out_dim
 - **Activation**: ReLU with dropout (0.1)
 - **Projection Head**: 2-layer MLP for contrastive pre-training (discarded at evaluation)
@@ -173,6 +187,7 @@ Two-layer Graph Convolutional Network:
 ### 8. Discriminator (`discriminator.py`)
 
 Semantics-consistency discriminator for fine-tuning:
+
 - **Architecture**: 3-layer MLP with LeakyReLU(0.2) and Sigmoid
 - **Input Fusion**: Concatenates encoder output H with Laplacian eigenvectors
 - **Pair Evaluation**: Hadamard product of fusion vectors
@@ -211,6 +226,7 @@ Semantics-consistency discriminator for fine-tuning:
 For each iteration:
 
 **Step A - Encoder Update** (15 epochs):
+
 ```
 - Sample augmented views
 - Compute H_u, H_v (with gradients for encoder training)
@@ -222,6 +238,7 @@ For each iteration:
 ```
 
 **Step B - Discriminator Update** (10 epochs):
+
 ```
 - Find new positive pairs in current H
 - Build new fusion vectors
@@ -242,7 +259,7 @@ cfg = get_config('cora', tau=1.0, lr_enc=5e-4)
 
 # Key parameters
 cfg.tau                # Temperature (0.8 for homophilic, 1.2 for heterophilic)
-cfg.m                  # SPART partition size (128)
+cfg.k                  # Number of partitions for SPART (4)
 cfg.alpha, cfg.beta    # Sigmoid parameters for conflict weighting
 cfg.eta                # Discriminator score threshold (0.6)
 cfg.pretrain_enc_epochs  # 300
@@ -252,7 +269,7 @@ cfg.finetune_disc_epochs # 10
 ### Dataset-Specific Defaults
 
 | Parameter | Cora | Citeseer | Pubmed | Chameleon | Squirrel | Actor |
-|-----------|------|----------|--------|-----------|----------|-------|
+| --------- | ---- | -------- | ------ | --------- | -------- | ----- |
 | tau       | 0.8  | 0.8      | 0.8    | 1.2       | 1.2      | 1.2   |
 | Pretrain  | 300  | 300      | 300    | 400       | 400      | 400   |
 
@@ -267,6 +284,7 @@ python main.py --dataset cora --evaluate --n-eval-runs 10
 ```
 
 The evaluation:
+
 1. Extracts frozen encoder representations H
 2. For 10 runs with random train/test splits:
    - Trains logistic regression on 10% training nodes
@@ -289,6 +307,7 @@ set_seed(42)  # Sets torch, numpy, and random seeds
 ```
 
 Use `--seed` flag to set custom seed:
+
 ```bash
 python main.py --dataset cora --seed 42 --evaluate
 ```
@@ -298,6 +317,7 @@ python main.py --dataset cora --seed 42 --evaluate
 ### Memory Efficiency
 
 - **Reduce batch size** if OOM errors occur:
+
   ```bash
   python main.py --dataset chameleon --batch-size 512
   ```
@@ -310,6 +330,7 @@ python main.py --dataset cora --seed 42 --evaluate
 ### Training Speed
 
 - **Fewer pre-training epochs**:
+
   ```bash
   python main.py --dataset cora --pretrain-epochs 100
   ```

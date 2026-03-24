@@ -10,15 +10,14 @@ and improves learning stability.
 import torch
 import torch.nn.functional as F
 
-#request change: function should take number of partitions k as input not m
-def spart_similarity(H1, H2, m, tau):
+def spart_similarity(H1, H2, k, tau):
     """
     Compute exponential partitioned similarity between two batches of representations.
 
     Args:
         H1 (torch.Tensor): Batch of representations, shape (B, d)
         H2 (torch.Tensor): Batch of representations, shape (B, d)
-        m (int): Partition size (number of features per partition)
+        k (int): Number of partitions
         tau (float): Temperature parameter for scaling
 
     Returns:
@@ -35,35 +34,34 @@ def spart_similarity(H1, H2, m, tau):
     H1_shuffled = H1[:, perm]
     H2_shuffled = H2[:, perm]
 
-    # Compute number of partitions
-    K = d // m
-    assert K > 0, f"Partition size m={m} must be <= feature dimension d={d}"
+    # Compute partition size
+    m = d // k
+    assert m > 0, f"Number of partitions k={k} must be <= feature dimension d={d}"
 
     # Accumulator for log-probabilities (for numerically stable computation)
     log_S_list = []
 
     # For each partition, compute inner product matrix and store log-exp
-    for k in range(K):
-        start_idx = k * m
+    for i in range(k):
+        start_idx = i * m
         end_idx = start_idx + m
 
-        # Extract partition k from both batches
-        H1_k = H1_shuffled[:, start_idx:end_idx]  # shape: (B, m)
-        H2_k = H2_shuffled[:, start_idx:end_idx]  # shape: (B, m)
+        # Extract partition i from both batches
+        H1_i = H1_shuffled[:, start_idx:end_idx]  # shape: (B, m)
+        H2_i = H2_shuffled[:, start_idx:end_idx]  # shape: (B, m)
 
         # Compute inner product matrix for this partition
-        S_k = torch.mm(H1_k, H2_k.t())  # shape: (B, B)
+        S_i = torch.mm(H1_i, H2_i.t())  # shape: (B, B)
 
-        # Apply scaling (note: K * S_k / tau is the exponent)
+        # Apply scaling (note: k * S_i / tau is the exponent)
         # We'll handle the exponential in a numerically stable way using logsumexp
-        log_S_list.append(K * S_k / tau)
+        log_S_list.append(k * S_i / tau)
 
     # Use logsumexp for numerical stability
     # logsumexp(x) = log(sum(exp(x))) computed stably
-    # We want: (1/K) * sum(exp(K*S_k/tau)) = exp(logsumexp(log_S_list) - log(K))
-    #request change: formula seems off, should it be exp(logsumexp(log_S_list) - log(K)) instead of exp(logsumexp(log_S_list) - log(torch.tensor(K)))?
-    log_S_stacked = torch.stack(log_S_list, dim=0)  # shape: (K, B, B)
-    log_S_part = torch.logsumexp(log_S_stacked, dim=0) - torch.log(torch.tensor(K, dtype=H1.dtype, device=H1.device))
+    # We want: (1/k) * sum(exp(k*S_i/tau)) = exp(logsumexp(log_S_list) - log(k))
+    log_S_stacked = torch.stack(log_S_list, dim=0)  # shape: (k, B, B)
+    log_S_part = torch.logsumexp(log_S_stacked, dim=0) - torch.log(torch.tensor(k, dtype=H1.dtype, device=H1.device))
 
     # Exponentiate to get the final similarity
     S_part = torch.exp(log_S_part)
@@ -75,18 +73,18 @@ def _test_spart_lower_bound():
     """
     Test that spart_similarity provides a lower bound on standard exponential similarity.
 
-    Verifies that spart_similarity(H, H, m, tau) >= exp(H @ H.T / tau) elementwise.
+    Verifies that spart_similarity(H, H, k, tau) >= exp(H @ H.T / tau) elementwise.
     This is based on Jensen's inequality for the exponential function.
     """
     # Create test tensors
     B, d = 16, 128
-    m = 32
+    k = 4  # 4 partitions of size 32
     tau = 0.8
 
     H = torch.randn(B, d)
 
     # Compute SPART similarity
-    S_spart = spart_similarity(H, H, m, tau)
+    S_spart = spart_similarity(H, H, k, tau)
 
     # Compute standard exponential similarity
     S_standard = torch.exp(torch.mm(H, H.t()) / tau)
@@ -116,13 +114,13 @@ def _test_spart_properties():
     - Symmetric when H1 == H2
     """
     B, d = 32, 256
-    m = 64
+    k = 4  # 4 partitions of size 64
     tau = 0.8
 
     H1 = torch.randn(B, d)
     H2 = torch.randn(B, d)
 
-    S = spart_similarity(H1, H2, m, tau)
+    S = spart_similarity(H1, H2, k, tau)
 
     tests_passed = []
 
@@ -135,7 +133,7 @@ def _test_spart_properties():
     tests_passed.append("[PASS] All values positive")
 
     # Test 3: High diagonal (self-similarity)
-    S_self = spart_similarity(H1, H1, m, tau)
+    S_self = spart_similarity(H1, H1, k, tau)
     diag = torch.diag(S_self).mean()
     assert diag > 1.0, f"Expected high self-similarity, got {diag:.4f}"
     tests_passed.append("[PASS] High self-similarity on diagonal")
@@ -143,9 +141,9 @@ def _test_spart_properties():
     # Test 4: Symmetry when H1 == H2
     torch.manual_seed(42)
     H = torch.randn(B, d)
-    S1 = spart_similarity(H, H, m, tau)
+    S1 = spart_similarity(H, H, k, tau)
     torch.manual_seed(42)
-    S2 = spart_similarity(H, H, m, tau)
+    S2 = spart_similarity(H, H, k, tau)
     # Note: not strictly symmetric due to random permutation, but shape is consistent
     assert S1.shape == S2.shape, "Shapes should be consistent"
     tests_passed.append("[PASS] Consistent output for same input")
