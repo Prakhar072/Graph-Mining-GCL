@@ -105,6 +105,11 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
     # Compute cosine similarity matrix
     cos_sim_matrix = compute_cosine_similarity_matrix(X)
 
+    # Precompute PPR scaling so sampled values are safely mapped into [-1, 1]
+    ppr_min = ppr_matrix.min().item()
+    ppr_max = ppr_matrix.max().item()
+    ppr_range = ppr_max - ppr_min
+
     # Sample uniformly from all node pairs
     i_samples = torch.randint(0, num_nodes, (n_samples,))
     j_samples = torch.randint(0, num_nodes, (n_samples,))
@@ -118,8 +123,9 @@ def compute_conflict_index(A, X, n_samples=10000, alpha=0.15, device=None):
         ppr_sim = ppr_matrix[i, j].item()
         cos_sim = cos_sim_matrix[i, j].item()
 
-        # Normalize PPR to [-1, 1] for fair comparison
-        ppr_norm = ppr_sim * 2 - 1
+        # Min-max normalize PPR globally, then map to [-1, 1] for fair comparison
+        ppr_unit = (ppr_sim - ppr_min) / (ppr_range + 1e-8)
+        ppr_norm = ppr_unit * 2 - 1
         cos_norm = cos_sim
 
         conflict = abs(ppr_norm - cos_norm)

@@ -367,6 +367,8 @@ def finetune_phase(
                 # This prevents complete zeroing out of weight matrix
                 soft_weights = torch.sigmoid((calibration_scores - cfg.eta) * 10)  # Sharper sigmoid centered at eta
                 W_batch_sliced = W_total[batch_nodes][:, batch_nodes].to(device)
+                row_sums = W_batch_sliced.sum(dim=1, keepdim=True).clamp(min=1e-8)
+                W_batch_sliced = W_batch_sliced / row_sums
                 W_cali = W_batch_sliced * soft_weights.reshape(B, B)
 
                 # Get batch representations for both views
