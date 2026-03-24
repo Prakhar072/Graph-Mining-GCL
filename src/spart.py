@@ -10,6 +10,39 @@ and improves learning stability.
 import torch
 import torch.nn.functional as F
 
+def spart_similarity_logits(H1, H2, k, tau):
+    """
+    Compute SPART logits in log-space without exponentiating.
+
+    Returns:
+        torch.Tensor: Logit matrix of shape (B, B)
+    """
+    B, d = H1.shape
+    assert H2.shape == (B, d), f"H1 and H2 must have same shape, got {H1.shape} and {H2.shape}"
+
+    perm = torch.randperm(d, device=H1.device)
+    H1_shuffled = H1[:, perm]
+    H2_shuffled = H2[:, perm]
+
+    m = d // k
+    assert m > 0, f"Number of partitions k={k} must be <= feature dimension d={d}"
+
+    log_S_list = []
+    for i in range(k):
+        start_idx = i * m
+        end_idx = start_idx + m
+        H1_i = H1_shuffled[:, start_idx:end_idx]
+        H2_i = H2_shuffled[:, start_idx:end_idx]
+        S_i = torch.mm(H1_i, H2_i.t())
+        log_S_list.append(k * S_i / tau)
+
+    log_S_stacked = torch.stack(log_S_list, dim=0)
+    log_S_part = torch.logsumexp(log_S_stacked, dim=0) - torch.log(
+        torch.tensor(k, dtype=H1.dtype, device=H1.device)
+    )
+    return log_S_part
+
+
 def spart_similarity(H1, H2, k, tau):
     """
     Compute exponential partitioned similarity between two batches of representations.
@@ -24,46 +57,7 @@ def spart_similarity(H1, H2, k, tau):
         torch.Tensor: Similarity matrix of shape (B, B) where S[i,j] is the
                      similarity between H1[i] and H2[j]
     """
-    B, d = H1.shape
-    assert H2.shape == (B, d), f"H1 and H2 must have same shape, got {H1.shape} and {H2.shape}"
-
-    # Generate a random permutation of feature dimensions
-    perm = torch.randperm(d, device=H1.device)
-
-    # Apply the same permutation to both H1 and H2
-    H1_shuffled = H1[:, perm]
-    H2_shuffled = H2[:, perm]
-
-    # Compute partition size
-    m = d // k
-    assert m > 0, f"Number of partitions k={k} must be <= feature dimension d={d}"
-
-    # Accumulator for log-probabilities (for numerically stable computation)
-    log_S_list = []
-
-    # For each partition, compute inner product matrix and store log-exp
-    for i in range(k):
-        start_idx = i * m
-        end_idx = start_idx + m
-
-        # Extract partition i from both batches
-        H1_i = H1_shuffled[:, start_idx:end_idx]  # shape: (B, m)
-        H2_i = H2_shuffled[:, start_idx:end_idx]  # shape: (B, m)
-
-        # Compute inner product matrix for this partition
-        S_i = torch.mm(H1_i, H2_i.t())  # shape: (B, B)
-
-        # Apply scaling (note: k * S_i / tau is the exponent)
-        # We'll handle the exponential in a numerically stable way using logsumexp
-        log_S_list.append(k * S_i / tau)
-
-    # Use logsumexp for numerical stability
-    # logsumexp(x) = log(sum(exp(x))) computed stably
-    # We want: (1/k) * sum(exp(k*S_i/tau)) = exp(logsumexp(log_S_list) - log(k))
-    log_S_stacked = torch.stack(log_S_list, dim=0)  # shape: (k, B, B)
-    log_S_part = torch.logsumexp(log_S_stacked, dim=0) - torch.log(torch.tensor(k, dtype=H1.dtype, device=H1.device))
-
-    # Exponentiate to get the final similarity
+    log_S_part = spart_similarity_logits(H1, H2, k, tau)
     S_part = torch.exp(log_S_part)
 
     return S_part

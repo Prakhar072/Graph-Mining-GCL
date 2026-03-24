@@ -13,9 +13,9 @@ import numpy as np
 # Try relative import if available, otherwise absolute
 #request change: should be able to use proper import now that we are in the same package
 try:
-    from .spart import spart_similarity
+    from .spart import spart_similarity_logits
 except ImportError:
-    from spart import spart_similarity
+    from spart import spart_similarity_logits
 
 # request rewrites: we are implementing something completely different from the outlined methodology
 
@@ -71,9 +71,9 @@ def soft_contrastive_loss(H_u, H_v, W, tau, k):
     assert W.shape == (B, B), f"W must have shape ({B}, {B}), got {W.shape}"
 
     # Cross-view similarity: queries from u against keys from v
-    S_uv = spart_similarity(H_u, H_v, k, tau)  # shape: (B, B)
+    S_uv = spart_similarity_logits(H_u, H_v, k, tau)  # shape: (B, B)
     # Symmetric direction: queries from v against keys from u
-    S_vu = spart_similarity(H_v, H_u, k, tau)  # shape: (B, B)
+    S_vu = spart_similarity_logits(H_v, H_u, k, tau)  # shape: (B, B)
 
     # Compute log-softmax along dimension 1 (for each query)
     log_probs_uv = F.log_softmax(S_uv, dim=1)  # shape: (B, B)
