@@ -70,12 +70,6 @@ def soft_contrastive_loss(H_u, H_v, W, tau, k):
     assert H_v.shape == (B, d), f"H_v must have shape ({B}, {d}), got {H_v.shape}"
     assert W.shape == (B, B), f"W must have shape ({B}, {B}), got {W.shape}"
 
-    # Ensure W is row-stochastic (each row sums to 1)
-    # This handles batched slices of W_total which may not sum to 1
-    row_sums = W.sum(dim=1, keepdim=True)
-    row_sums = torch.clamp(row_sums, min=1e-8)  # Avoid division by zero
-    W = W / row_sums
-
     # Cross-view similarity: queries from u against keys from v
     S_uv = spart_similarity(H_u, H_v, k, tau)  # shape: (B, B)
     # Symmetric direction: queries from v against keys from u
