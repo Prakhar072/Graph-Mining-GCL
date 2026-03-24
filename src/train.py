@@ -350,7 +350,8 @@ def finetune_phase(
                 C_struct_dev = C_struct.to(device)
                 with torch.no_grad():
                     discriminator.eval()
-                    Z_u = build_fusion_vectors(H_u[batch_nodes].detach(), C_struct_dev[batch_nodes])
+                    C_struct_batch = C_struct_dev[batch_nodes]
+                    Z_u = build_fusion_vectors(H_u[batch_nodes].detach(), C_struct_batch)
                     pair_indices = torch.stack(
                         [
                             torch.arange(B, device=device).repeat_interleave(B),
