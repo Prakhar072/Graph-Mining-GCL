@@ -8,7 +8,6 @@ graph's conflict index (homophily-heterophily regime).
 
 import torch
 import torch.nn.functional as F
-import numpy as np
 
 # Try relative import if available, otherwise absolute
 #request change: should be able to use proper import now that we are in the same package
@@ -35,11 +34,12 @@ def balanced_softmax_loss(scores, labels, n_pos, n_neg):
     """
     device = scores.device
 
-    adjustment = torch.where(
-        labels == 1,
-        torch.tensor(np.log(n_pos + 1e-8), dtype=scores.dtype, device=device),
-        torch.tensor(np.log(n_neg + 1e-8), dtype=scores.dtype, device=device)
+    eps = 1e-8
+    # Add log(p_neg / p_pos) to the positive logit; this down-weights the majority class.
+    pos_adjustment = torch.log(
+        torch.tensor((n_neg + eps) / (n_pos + eps), dtype=scores.dtype, device=device)
     )
+    adjustment = torch.where(labels == 1, pos_adjustment, torch.zeros_like(scores))
 
     adjusted_scores = scores + adjustment
     loss = F.binary_cross_entropy_with_logits(adjusted_scores, labels.float())
