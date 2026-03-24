@@ -490,8 +490,6 @@ def train(dataset_name, device='cpu', **kwargs):
 
     # Create models
     print("\nCreating models...")
-    encoder = GCNEncoder(cfg.in_dim, cfg.hidden_dim, cfg.out_dim, cfg.dropout).to(device)
-    proj_head = ProjectionHead(cfg.out_dim, cfg.proj_dim).to(device)
     model = ContrastiveModel(cfg.in_dim, cfg.hidden_dim, cfg.out_dim, cfg.proj_dim, cfg.dropout).to(device)
 
     # Get eigenvectors
