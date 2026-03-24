@@ -184,7 +184,7 @@ def print_config(cfg: Config) -> None:
         'Dataset & Training': ['dataset', 'device', 'seed'],
         'Dimensions': ['in_dim', 'hidden_dim', 'out_dim', 'proj_dim'],
         'Augmentation': ['p_e', 'p_f'],
-        'Contrastive Learning': ['tau', 'm'],
+        'Contrastive Learning': ['tau', 'k'],
         'Discriminator': ['t'],
         'Conflict-based Weighting': ['alpha', 'beta', 'eta'],
         'Training Phases': ['pretrain_enc_epochs', 'pretrain_disc_epochs', 'n_iterations',
@@ -210,12 +210,12 @@ if __name__ == "__main__":
     # Test homophilic dataset
     print("Loading Cora config:")
     cfg_cora = get_config('cora')
-    print(f"  tau={cfg_cora.tau}, m={cfg_cora.m}")
+    print(f"  tau={cfg_cora.tau}, k={cfg_cora.k}")
 
     # Test heterophilic dataset
     print("\nLoading Chameleon config:")
     cfg_chameleon = get_config('chameleon')
-    print(f"  tau={cfg_chameleon.tau}, m={cfg_chameleon.m}")
+    print(f"  tau={cfg_chameleon.tau}, k={cfg_chameleon.k}")
 
     # Test with overrides
     print("\nLoading with custom tau:")
