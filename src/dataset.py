@@ -34,7 +34,7 @@ def load_dataset(name, normalize_adj=True, normalize_features=True):
 
     Returns:
         tuple: (A_normed, X_normed, y, edge_index, N, D)
-            - A_normed: Normalized adjacency matrix 
+            - A_normed: Dense normalized adjacency matrix
             - X_normed: Row-normalized feature matrix, shape (N, D)
             - y: Node labels, shape (N,)
             - edge_index: Edge indices, shape (2, num_edges)
@@ -93,32 +93,7 @@ def load_dataset(name, normalize_adj=True, normalize_features=True):
     # Create normalized adjacency matrix
     A_normed = None
     if normalize_adj:
-        # Add self-loops to adjacency
-        edge_index_with_loops = torch_geometric.utils.add_self_loops(edge_index, num_nodes=N)[0]
-
-        # Compute degree
-        degree = torch_geometric.utils.degree(
-            edge_index_with_loops[0],
-            num_nodes=N,
-            dtype=X.dtype
-        )
-
-        # Compute D^{-1/2}
-        deg_inv_sqrt = torch.pow(degree, -0.5)
-        deg_inv_sqrt[torch.isinf(deg_inv_sqrt)] = 0.0
-
-        # Normalize: D^{-1/2} * A * D^{-1/2}
-        #request change 2: why are we not using the @ multiplcation here?
-        edge_weight = deg_inv_sqrt[edge_index_with_loops[0]] * deg_inv_sqrt[edge_index_with_loops[1]]
-
-        # Create sparse tensor for normalized adjacency
-        # stores edges as (row_indices, col_indices, values)
-        A_normed = torch.sparse_coo_tensor(
-            edge_index_with_loops,
-            edge_weight,
-            size=(N, N),
-            dtype=X.dtype
-        )
+        A_normed = get_normalized_adjacency_dense(edge_index, N, dtype=X.dtype)
 
     result = (A_normed, X, y, edge_index, N, D)
 
