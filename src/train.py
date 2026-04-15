@@ -179,18 +179,101 @@ def load_pretrained_encoder(dataset_name, device='cpu', checkpoint_dir='./checkp
         f"Please train the model first without --evaluate"
     )
 
-def pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir):
-    """Pre-train encoder with soft contrastive loss."""
+def find_resume_stage(checkpoint_dir, dataset_name):
+    """Determine resume stage from existing checkpoints.
+    
+    Returns: (stage, checkpoint_info)
+        stage: 'finetune', 'pretrain_final', 'pretrain', or 'start'
+        checkpoint_info: 
+            - For 'finetune': (encoder_path, discriminator_path, iteration)
+            - For 'pretrain_final': encoder_path
+            - For 'pretrain': epoch number
+            - For 'start': None
+    """
+    checkpoint_path = Path(checkpoint_dir)
+    if not checkpoint_path.exists():
+        return 'start', None
+    
+    # Look in dataset-specific subdirectory
+    dataset_checkpoint_dir = checkpoint_path / dataset_name
+    search_path = dataset_checkpoint_dir if dataset_checkpoint_dir.exists() else checkpoint_path
+    
+    # Check for fine-tuning checkpoints
+    finetune_checkpoints = sorted(
+        search_path.glob('encoder_finetune_iter_*.pt'),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )
+    if finetune_checkpoints:
+        # Extract iteration number and find corresponding discriminator checkpoint
+        latest = finetune_checkpoints[0]
+        import re
+        match = re.search(r'encoder_finetune_iter_(\d+)', latest.name)
+        if match:
+            iteration = int(match.group(1))
+            # Look for corresponding discriminator checkpoint
+            disc_checkpoint = search_path / f'discriminator_finetune_iter_{iteration}_epoch_{iteration}.pt'
+            if not disc_checkpoint.exists():
+                # Maybe it doesn't exist yet, that's okay
+                disc_checkpoint = None
+            return 'finetune', (str(latest), str(disc_checkpoint) if disc_checkpoint else None, iteration)
+    
+    # Check for pretrain final checkpoint
+    pretrain_final_checkpoints = sorted(
+        search_path.glob('encoder_pretrain_final*.pt'),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )
+    if pretrain_final_checkpoints:
+        return 'pretrain_final', str(pretrain_final_checkpoints[0])
+    
+    # Check for pretrain checkpoints (encoder_pretrain_epoch_X.pt)
+    pretrain_checkpoints = sorted(
+        search_path.glob('encoder_pretrain_epoch_*.pt'),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )
+    if pretrain_checkpoints:
+        # Extract epoch number from filename
+        latest = pretrain_checkpoints[0]
+        import re
+        match = re.search(r'encoder_pretrain_epoch_(\d+)', latest.name)
+        if match:
+            epoch = int(match.group(1))
+            return 'pretrain', epoch
+    
+    return 'start', None
+
+
+def pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir, resume_from_epoch=None):
+    """Pre-train encoder with soft contrastive loss, optionally resuming from checkpoint.
+    
+    Args:
+        resume_from_epoch: If provided, resume from this epoch (skip earlier epochs)
+    """
     print("\n" + "="*60)
     print("PRE-TRAINING ENCODER")
+    if resume_from_epoch:
+        print(f"(Resuming from epoch {resume_from_epoch})")
     print("="*60)
 
     optimizer = optim.Adam(model.parameters(), lr=cfg.lr_enc)
+    
+    start_epoch = resume_from_epoch if resume_from_epoch else 0
+    
+    # Load checkpoint if resuming
+    if resume_from_epoch and checkpoint_dir:
+        checkpoint_path = Path(checkpoint_dir) / f'encoder_pretrain_epoch_{resume_from_epoch}.pt'
+        if checkpoint_path.exists():
+            print(f"Loading checkpoint: {checkpoint_path.name}")
+            model.encoder = load_checkpoint(model.encoder, str(checkpoint_path), device=device)
+        else:
+            print(f"Warning: Checkpoint not found at {checkpoint_path}, starting fresh from epoch {resume_from_epoch}")
 
     N = X.shape[0]
     batch_size = cfg.batch_size
 
-    for epoch in range(cfg.pretrain_enc_epochs):
+    for epoch in range(start_epoch, cfg.pretrain_enc_epochs):
         # Re-shuffle node order each epoch for diverse negative sampling
         batch_indices = torch.randperm(N).split(batch_size)
         total_loss = 0
@@ -312,16 +395,25 @@ def finetune_phase(
     C_struct,
     device,
     checkpoint_dir,
+    resume_from_iteration=None,
 ):
-    """Fine-tuning phase with discriminator-based weight calibration."""
+    """Fine-tuning phase with discriminator-based weight calibration.
+    
+    Args:
+        resume_from_iteration: If provided, resume from this iteration (skip earlier iterations)
+    """
     print("\n" + "="*60)
     print("FINE-TUNING PHASE")
+    if resume_from_iteration:
+        print(f"(Resuming from iteration {resume_from_iteration})")
     print("="*60)
 
     N = X.shape[0]
     batch_size = cfg.batch_size
+    
+    start_iteration = resume_from_iteration if resume_from_iteration else 0
 
-    for iteration in range(cfg.n_iterations):
+    for iteration in range(start_iteration, cfg.n_iterations):
         print(f"\nIteration {iteration + 1}/{cfg.n_iterations}")
 
         # Refresh attribute supervision periodically using current encoder embeddings.
@@ -468,15 +560,17 @@ def finetune_phase(
 
         if cfg.save_checkpoints:
             save_checkpoint(encoder, iteration + 1, checkpoint_dir, f'encoder_finetune_iter_{iteration + 1}')
+            save_checkpoint(discriminator, iteration + 1, checkpoint_dir, f'discriminator_finetune_iter_{iteration + 1}')
 
 
-def train(dataset_name, device='cpu', **kwargs):
+def train(dataset_name, device='cpu', resume=False, **kwargs):
     """
     Full training pipeline.
 
     Args:
         dataset_name (str): Dataset name
         device (str): Device to use ('cpu' or 'cuda')
+        resume (bool): Resume from latest checkpoint if available
         **kwargs: Override config parameters
     """
     # Setup
@@ -503,12 +597,21 @@ def train(dataset_name, device='cpu', **kwargs):
     # Use cached dense normalized adjacency from dataset loader
     A_norm_dense = A_norm.to(device)
 
+    # Determine resume stage if requested
+    resume_stage = 'start'
+    resume_info = None
+    if resume and checkpoint_dir:
+        resume_stage, resume_info = find_resume_stage(checkpoint_dir, dataset_name)
+        if resume_stage != 'start':
+            print(f"\n✓ Found existing checkpoints, resuming from stage: {resume_stage}")
+
     # Compute conflict index
     print("\nComputing conflict index...")
     C = compute_conflict_index(A_norm_dense, X, n_samples=10000)
+    print("Conflict index C :", C) 
 
     # Compute weight matrices
-    print("Computing structural weights...")
+    print("\nComputing structural weights...")
     W_s = compute_structural_weights(A_norm_dense, N, method='ppr', alpha=0.15)
 
     print("Computing attribute weights...")
@@ -519,40 +622,76 @@ def train(dataset_name, device='cpu', **kwargs):
     W_total = compute_combined_weights(W_s, W_a, C, alpha=cfg.alpha, beta=cfg.beta)
     W_total = W_total.to(device)
 
-    # Create models
-    print("\nCreating models...")
-    model = ContrastiveModel(cfg.in_dim, cfg.hidden_dim, cfg.out_dim, cfg.proj_dim, cfg.dropout).to(device)
-
-    # Get eigenvectors
+    # Get eigenvectors (needed for both pre-training and fine-tuning)
     print("Computing structural eigenvectors...")
     C_struct = get_eigenvectors(A_norm_dense.to(device), t=cfg.t, device=device)
 
-    # Pre-training
-    pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir)
+    # Create models
+    print("\nCreating models...")
+    model = ContrastiveModel(cfg.in_dim, cfg.hidden_dim, cfg.out_dim, cfg.proj_dim, cfg.dropout).to(device)
+    encoder = model.encoder
+    discriminator = Discriminator(cfg.out_dim + cfg.t, cfg.hidden_dim).to(device)
+    
+    # Check if we need to resume from a checkpoint
+    if resume_stage in ['finetune', 'pretrain_final', 'pretrain']:
+        if resume_stage == 'finetune':
+            encoder_path, disc_path, resume_iteration = resume_info
+            print(f"\nLoading fine-tuning checkpoints:")
+            print(f"  Encoder: {Path(encoder_path).name}")
+            encoder = load_checkpoint(encoder, encoder_path, device=device)
+            if disc_path and Path(disc_path).exists():
+                print(f"  Discriminator: {Path(disc_path).name}")
+                discriminator = load_checkpoint(discriminator, disc_path, device=device)
+            else:
+                print(f"  Discriminator: Not found, creating fresh")
+        elif resume_stage == 'pretrain_final':
+            checkpoint_path = resume_info
+            print(f"\nLoading pre-trained checkpoint: {Path(checkpoint_path).name}")
+            encoder = load_checkpoint(encoder, checkpoint_path, device=device)
+        elif resume_stage == 'pretrain':
+            resume_epoch = resume_info
+            # For pretrain resume, we don't load the checkpoint here
+            # It will be loaded in pretrain_encoder function
+            print(f"\nResuming pre-training from epoch {resume_epoch}")
 
-    # Use the trained encoder from the model
+    # PRE-TRAINING PHASE
+    if resume_stage not in ['pretrain_final', 'finetune']:
+        # Need to do pre-training
+        resume_epoch = resume_info if resume_stage == 'pretrain' else None
+        pretrain_encoder(model, cfg, X, edge_index, W_total, device, checkpoint_dir, resume_from_epoch=resume_epoch)
+    else:
+        print("\n✓ Skipping pre-training (resuming from later stage)")
+
     encoder = model.encoder
 
-    # Discriminator pre-training
-    discriminator = Discriminator(cfg.out_dim + cfg.t, cfg.hidden_dim).to(device)
-    optimizer_disc_pretrain = optim.Adam(discriminator.parameters(), lr=cfg.lr_disc)
+    # DISCRIMINATOR PRE-TRAINING
+    if resume_stage != 'finetune':
+        # Only skip discriminator pre-training if resuming from fine-tuning
+        optimizer_disc_pretrain = optim.Adam(discriminator.parameters(), lr=cfg.lr_disc)
 
-    pretrain_discriminator(
-        discriminator,
-        optimizer_disc_pretrain,
-        encoder,
-        cfg,
-        X,
-        edge_index,
-        A_norm_dense,
-        C_struct,
-        device,
-    )
+        pretrain_discriminator(
+            discriminator,
+            optimizer_disc_pretrain,
+            encoder,
+            cfg,
+            X,
+            edge_index,
+            A_norm_dense,
+            C_struct,
+            device,
+        )
+    else:
+        # Skip discriminator pre-training (already done in previous run)
+        print("✓ Skipping discriminator pre-training (resuming from fine-tuning)")
 
-    # Fine-tuning
+    # FINE-TUNING PHASE
     optimizer_enc_finetune = optim.Adam(encoder.parameters(), lr=cfg.lr_enc)
     optimizer_disc_finetune = optim.Adam(discriminator.parameters(), lr=cfg.lr_disc)
 
+    resume_iteration = None
+    if resume_stage == 'finetune':
+        _, resume_iteration = resume_info
+    
     finetune_phase(
         encoder,
         discriminator,
@@ -568,6 +707,7 @@ def train(dataset_name, device='cpu', **kwargs):
         C_struct,
         device,
         checkpoint_dir,
+        resume_from_iteration=resume_iteration,
     )
 
     print("\n" + "="*60)

@@ -59,6 +59,13 @@ def main():
     )
 
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Batch size override (overrides config.batch_size)"
+    )
+
+    parser.add_argument(
         "--tau",
         type=float,
         default=None,
@@ -78,6 +85,12 @@ def main():
         help="Number of evaluation runs"
     )
 
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume training from the latest checkpoint"
+    )
+
     args = parser.parse_args()
 
     # Prepare overrides
@@ -86,6 +99,8 @@ def main():
         kwargs["pretrain_enc_epochs"] = args.pretrain_epochs
     if args.tau is not None:
         kwargs["tau"] = args.tau
+    if args.batch_size is not None:
+        kwargs["batch_size"] = args.batch_size
 
     print("\n" + "="*70)
     print("CONFLICT-CONDITIONED GRAPH CONTRASTIVE LEARNING")
@@ -117,9 +132,12 @@ def main():
             print("\nFalling back to training...")
             encoder, cfg = train(args.dataset, device=args.device, **kwargs)
     else:
-        print("STARTING TRAINING")
+        if args.resume:
+            print("RESUMING TRAINING FROM CHECKPOINT")
+        else:
+            print("STARTING TRAINING")
         print("="*70)
-        encoder, cfg = train(args.dataset, device=args.device, **kwargs)
+        encoder, cfg = train(args.dataset, device=args.device, resume=args.resume, **kwargs)
 
     # Evaluate (optional)
     if args.evaluate:
